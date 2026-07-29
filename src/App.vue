@@ -17,6 +17,8 @@ import EffectsPanel from './components/EffectsPanel.vue';
 import RecorderPanel from './components/RecorderPanel.vue';
 import { GSCHEMA, MUSIC, GROUPS, GROUP_SHORT } from './core/constants.js';
 import { useStore } from './composables/useStore.js';
+import ShortcutsModal from './components/ShortcutsModal.vue';
+import { useShortcuts } from './composables/useShortcuts.js';
 
 const playing = ref(false);
 const { g, params, dark, saveState } = useStore(() => syncEngine());
@@ -30,6 +32,7 @@ const mic = ref(false),
   bpm = ref('--'),
   railOpen = ref(false),
   inspOpen = ref(false),
+  helpOpen = ref(false),
   error = ref(null),
   audioEl = ref(null),
   canvasEl = ref(null),
@@ -166,6 +169,20 @@ const toggleTheme = () => {
   document.documentElement.classList.toggle('dark', dark.value);
   saveState(g, params, dark.value);
 };
+
+const shortcuts = useShortcuts({
+  toggleHelp: () => (helpOpen.value = !helpOpen.value),
+  togglePlay,
+  toggleFull,
+  toggleMic: toggleMicrophone,
+  snapshot,
+  toggleTheme,
+  toggleRecord: () => {
+    if (recorder.recording.value) recorder.stop();
+    else recorder.start();
+  },
+});
+
 const onStageReady = (refs) => {
   canvasEl.value = refs.canvas.value;
   frameEl.value = refs.frame.value;
@@ -248,10 +265,12 @@ onUnmounted(() => {
         </select>
         <button class="btn" @click="snapshot">PNG</button>
         <button class="btn" @click="toggleFull">⛶</button>
+        <button class="btn" @click="helpOpen = true">⌨</button>
         <button class="btn" @click="toggleTheme">{{ dark ? '☀' : '☾' }}</button>
         <button class="btn xl:hidden" @click="inspOpen = !inspOpen">⚙</button>
       </div>
     </header>
+    <ShortcutsModal v-model="helpOpen" :shortcuts="shortcuts.list" />
     <div class="body-row">
       <aside class="rail" :class="{ open: railOpen }">
         <SourcePanel

@@ -1,1 +1,384 @@
-<script setup>\nimport { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';\n\nconst canvas = ref(null);\nconst audio = ref(null);\nconst fileName = ref('Демо-сигнал');\nconst playing = ref(false);\nconst recording = ref(false);\nconst dark = ref(true);\nconst preset = ref(localStorage.getItem('eq.preset') || 'bars');\nconst state = reactive(JSON.parse(localStorage.getItem('eq.state') || '{"amp":1,"speed":1,"smooth":0.58,"count":64,"glow":0.7,"bass":1,"mid":1,"treble":1}'));\nconst presets = [\n  { id:'bars', name:'Spectrum Bars', hint:'Логарифмический спектр с пиками' },\n  { id:'wave', name:'Neon Waveform', hint:'Временная волна с многослойным шлейфом' },\n  { id:'radial', name:'Radial Spectrum', hint:'Радиальная форма с реакцией на бас' },\n  { id:'particles', name:'Particle Burst', hint:'Частицы на импульсах и transient' },\n  { id:'waterfall', name:'Spectrum Waterfall', hint:'История спектра с плавной прокруткой' }\n];\nconst current = computed(() => presets.find(x => x.id === preset.value) || presets[0]);\nlet ctx, analyser, source, raf, mediaRecorder, chunks = [], destination;\nlet freq, timeData, smooth = new Float32Array(256), last = 0, demoT = 0;\n\nfunction persist(){ localStorage.setItem('eq.preset', preset.value); localStorage.setItem('eq.state', JSON.stringify(state)); }\nwatch([preset, state], persist, { deep:true });\nfunction resize(){ if(!canvas.value) return; const r=canvas.value.getBoundingClientRect(), d=Math.min(devicePixelRatio||1,2); canvas.value.width=Math.max(1,r.width*d); canvas.value.height=Math.max(1,r.height*d); ctx?.setTransform(d,0,0,d,0,0); }\nfunction ensureAudio(){\n  if(analyser) return;\n  const AC=window.AudioContext||window.webkitAudioContext; const ac=new AC();\n  analyser=ac.createAnalyser(); analyser.fftSize=2048; analyser.smoothingTimeConstant=state.smooth;\n  freq=new Uint8Array(analyser.frequencyBinCount); timeData=new Uint8Array(analyser.fftSize);\n  destination=ac.createMediaStreamDestination();\n  if(audio.value){ source=ac.createMediaElementSource(audio.value); source.connect(analyser); source.connect(ac.destination); source.connect(destination); }\n  window.__eqAudio=ac;\n}\nfunction loadFile(e){ const f=e.target.files?.[0]; if(!f) return; ensureAudio(); audio.value.src=URL.createObjectURL(f); fileName.value=f.name; audio.value.play(); }\nfunction togglePlay(){ ensureAudio(); if(!audio.value.src) return; audio.value.paused ? audio.value.play() : audio.value.pause(); }\nfunction color(x){ const h=18+220*x; return `hsl(${h} 92% 64%)`; }\nfunction data(){\n  if(analyser){ analyser.smoothingTimeConstant=state.smooth; analyser.getByteFrequencyData(freq); analyser.getByteTimeDomainData(timeData); }\n  const out=[]; for(let i=0;i<256;i++){ const p=i/255; const bin=Math.min(freq?.length-1||0, Math.max(0, Math.floor(Math.pow(p,2.2)*(freq?.length||1)))); const raw=(freq?.[bin]||0)/255; smooth[i]+=((raw*(p<.15?state.bass:p<.7?state.mid:state.treble))-smooth[i])*(raw>smooth[i]?.42:.16); out[i]=smooth[i]; } return out;\n}\nfunction draw(now=0){\n  raf=requestAnimationFrame(draw); const dt=Math.min(.05,(now-last)/1000||.016); last=now; demoT+=dt; resize(); const w=canvas.value.clientWidth,h=canvas.value.clientHeight; ctx.clearRect(0,0,w,h); ctx.fillStyle=dark.value?'#0d0c12':'#f3efe8'; ctx.fillRect(0,0,w,h); const d=data();\n  if(!analyser && state.demo!==false){ for(let i=0;i<d.length;i++){const p=i/d.length; d[i]=Math.max(0,(Math.sin(demoT*4+p*18)+1)/3*Math.exp(-p*2)+(Math.sin(demoT*9+p*80)+1)/12); } }\n  ctx.lineCap='round';\n  if(preset.value==='wave'){ ctx.beginPath(); for(let i=0;i<256;i++){const x=i/255*w,y=h/2+Math.sin(i*.08+demoT*3)*d[i]*h*.35*state.amp; i?ctx.lineTo(x,y):ctx.moveTo(x,y);} ctx.strokeStyle=color(.45);ctx.lineWidth=3;ctx.globalAlpha=.9;ctx.stroke(); }\n  else if(preset.value==='radial'){ const cx=w/2,cy=h/2,r=Math.min(w,h)*.18;ctx.beginPath();for(let i=0;i<256;i++){const a=i/256*Math.PI*2,v=d[i],rr=r+v*Math.min(w,h)*.3*state.amp;const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.strokeStyle=color(.65);ctx.lineWidth=2;ctx.stroke(); }\n  else if(preset.value==='particles'){ for(let i=0;i<Math.round(state.count*2);i++){const p=i/(state.count*2),v=d[(i*7)%256],a=p*Math.PI*2+demoT*.5,r=v*Math.min(w,h)*.4+20;ctx.fillStyle=color(p);ctx.globalAlpha=.25+v;ctx.beginPath();ctx.arc(w/2+Math.cos(a)*r,h/2+Math.sin(a)*r,1+v*7,0,Math.PI*2);ctx.fill();} }\n  else { const n=Math.max(8,Math.round(state.count)); const bw=w/n*.8; for(let i=0;i<n;i++){const x=i*w/n,v=d[Math.floor(i/n*256)],bh=v*v*h*.72*state.amp;ctx.fillStyle=color(i/n);ctx.globalAlpha=.9;ctx.fillRect(x,h*.78-bh,bw,Math.max(1,bh));ctx.globalAlpha=.22;ctx.fillRect(x,h*.78+4,bw,bh*.35);} }\n  ctx.globalAlpha=1;\n}\nasync function toggleRecord(){\n  ensureAudio(); if(recording.value){ mediaRecorder.stop(); return; }\n  await window.__eqAudio.resume(); const stream=canvas.value.captureStream(30); destination && stream.addTrack(destination.stream.getAudioTracks()[0]);\n  const type=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(x=>MediaRecorder.isTypeSupported(x));\n  chunks=[]; mediaRecorder=new MediaRecorder(stream,type?{mimeType:type,videoBitsPerSecond:8000000}:undefined); mediaRecorder.ondataavailable=e=>e.data.size&&chunks.push(e.data); mediaRecorder.onstop=()=>{const url=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}));const a=document.createElement('a');a.href=url;a.download=`eq-lab-${preset.value}.webm`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);recording.value=false;}; mediaRecorder.start(1000); recording.value=true;\n}\nfunction toggleTheme(){ dark.value=!dark.value; document.documentElement.classList.toggle('dark',dark.value); }\nonMounted(()=>{ ctx=canvas.value.getContext('2d',{alpha:false,desynchronized:true}); resize(); window.addEventListener('resize',resize); raf=requestAnimationFrame(draw); });\nonBeforeUnmount(()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',resize);});\n</script>\n\n<template>\n  <div class="min-h-screen" :class="dark?'bg-[#12111a] text-[#f2eee8]':'bg-[#f3efe8] text-[#27231e]'>\n    <header class="flex items-center gap-3 border-b border-white/10 px-5 py-3">\n      <strong class="font-mono tracking-[.2em]">EQ LAB</strong><span class="text-xs opacity-50">{{ fileName }}</span><div class="ml-auto flex gap-2"><button class="rounded border border-white/15 px-3 py-2 text-sm" @click="toggleTheme">{{dark?'☀':'☾'}}</button><button class="rounded bg-[#ff7048] px-3 py-2 text-sm font-semibold text-[#21110c]" @click="toggleRecord">{{ recording?'■ Остановить':'● Записать WebM' }}</button></div>\n    </header>\n    <main class="grid min-h-[calc(100vh-61px)] grid-cols-[260px_1fr_250px] max-[1000px]:grid-cols-1">\n      <aside class="border-r border-white/10 p-4 max-[1000px]:border-r-0 max-[1000px]:border-b">\n        <label class="mb-3 block rounded border border-dashed border-white/20 p-3 text-center text-sm">Открыть аудио<input class="hidden" type="file" accept="audio/*" @change="loadFile"></label><button class="mb-4 w-full rounded bg-white/10 px-3 py-2" @click="togglePlay">{{playing?'⏸ Пауза':'▶ Играть'}}</button><audio ref="audio" class="mb-5 w-full" controls @play="playing=true" @pause="playing=false"></audio>\n        <div class="mb-2 font-mono text-xs uppercase tracking-widest opacity-50">Визуализатор</div><button v-for="v in presets" :key="v.id" class="mb-1 block w-full rounded px-3 py-2 text-left text-sm" :class="preset===v.id?'bg-[#ff7048] text-[#21110c]':'bg-white/5'" @click="preset=v.id">{{v.name}}</button>\n      </aside>\n      <section class="flex min-h-0 flex-col items-center justify-center gap-4 p-5"><canvas ref="canvas" class="aspect-video w-full max-w-[1100px] rounded-xl border border-white/10"></canvas><div class="text-center text-xs opacity-50">{{ current.hint }} · {{ recording?'идёт запись WebM':'' }}</div></section>\n      <aside class="border-l border-white/10 p-4 max-[1000px]:border-l-0 max-[1000px]:border-t"><div class="mb-4 font-mono text-xs uppercase tracking-widest opacity-50">Параметры {{current.name}}</div><label v-for="(cfg,key) in {amp:['Амплитуда',.3,2.5,.05],speed:['Скорость',.1,3,.05],smooth:['Сглаживание',0,.95,.01],count:['Плотность',8,192,1],glow:['Свечение',0,1,.01],bass:['Bass',0,2.5,.05],mid:['Mid',0,2.5,.05],treble:['Treble',0,2.5,.05]}" :key="key" class="mb-4 block text-sm"><span class="mb-1 flex justify-between opacity-70"><span>{{cfg[0]}}</span><b>{{Number(state[key]).toFixed(2)}}</b></span><input v-model.number="state[key]" class="range w-full" type="range" :min="cfg[1]" :max="cfg[2]" :step="cfg[3]"></label></aside>\n    </main>\n  </div>\n</template>\n
+<script setup>
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+
+const canvas = ref(null);
+const audio = ref(null);
+const fileName = ref('Демо-сигнал');
+const playing = ref(false);
+const recording = ref(false);
+const dark = ref(true);
+const preset = ref(localStorage.getItem('eq.preset') || 'bars');
+const state = reactive(
+  JSON.parse(
+    localStorage.getItem('eq.state') ||
+      '{"amp":1,"speed":1,"smooth":0.58,"count":64,"glow":0.7,"bass":1,"mid":1,"treble":1}',
+  ),
+);
+
+const presets = [
+  { id: 'bars', name: 'Spectrum Bars', hint: 'Логарифмический спектр с пиками' },
+  { id: 'wave', name: 'Neon Waveform', hint: 'Временная волна с многослойным шлейфом' },
+  { id: 'radial', name: 'Radial Spectrum', hint: 'Радиальная форма с реакцией на бас' },
+  { id: 'particles', name: 'Particle Burst', hint: 'Частицы на импульсах и transient' },
+  { id: 'waterfall', name: 'Spectrum Waterfall', hint: 'История спектра с плавной прокруткой' },
+];
+
+const parameterSchema = {
+  amp: ['Амплитуда', 0.3, 2.5, 0.05],
+  speed: ['Скорость', 0.1, 3, 0.05],
+  smooth: ['Сглаживание', 0, 0.95, 0.01],
+  count: ['Плотность', 8, 192, 1],
+  glow: ['Свечение', 0, 1, 0.01],
+  bass: ['Bass', 0, 2.5, 0.05],
+  mid: ['Mid', 0, 2.5, 0.05],
+  treble: ['Treble', 0, 2.5, 0.05],
+};
+
+const current = computed(() => presets.find((item) => item.id === preset.value) || presets[0]);
+const parameters = computed(() => Object.entries(parameterSchema));
+
+let ctx;
+let analyser;
+let source;
+let audioContext;
+let animationFrame;
+let mediaRecorder;
+let chunks = [];
+let destination;
+let frequencyData;
+let timeData;
+let smoothed = new Float32Array(256);
+let lastFrame = 0;
+let demoTime = 0;
+
+function persist() {
+  localStorage.setItem('eq.preset', preset.value);
+  localStorage.setItem('eq.state', JSON.stringify(state));
+}
+
+watch([preset, state], persist, { deep: true });
+
+function resizeCanvas() {
+  if (!canvas.value) return;
+
+  const bounds = canvas.value.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.round(bounds.width * dpr));
+  const height = Math.max(1, Math.round(bounds.height * dpr));
+
+  if (canvas.value.width === width && canvas.value.height === height) return;
+
+  canvas.value.width = width;
+  canvas.value.height = height;
+  ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function ensureAudio() {
+  if (analyser) return;
+
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  audioContext = new AudioContext();
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = state.smooth;
+  frequencyData = new Uint8Array(analyser.frequencyBinCount);
+  timeData = new Uint8Array(analyser.fftSize);
+  destination = audioContext.createMediaStreamDestination();
+
+  if (audio.value) {
+    source = audioContext.createMediaElementSource(audio.value);
+    source.connect(analyser);
+    source.connect(audioContext.destination);
+    source.connect(destination);
+  }
+}
+
+function loadFile(event) {
+  const file = event.target.files?.[0];
+  if (!file || !audio.value) return;
+
+  ensureAudio();
+  audio.value.src = URL.createObjectURL(file);
+  fileName.value = file.name;
+  audio.value.play().catch(() => {});
+}
+
+function togglePlay() {
+  ensureAudio();
+  if (!audio.value?.src) return;
+
+  if (audio.value.paused) {
+    audio.value.play().catch(() => {});
+  } else {
+    audio.value.pause();
+  }
+}
+
+function color(position) {
+  return `hsl(${18 + 220 * position} 92% 64%)`;
+}
+
+function getSpectrum() {
+  if (analyser) {
+    analyser.smoothingTimeConstant = state.smooth;
+    analyser.getByteFrequencyData(frequencyData);
+    analyser.getByteTimeDomainData(timeData);
+  }
+
+  const output = [];
+
+  for (let index = 0; index < 256; index += 1) {
+    const position = index / 255;
+    const bin = Math.min(
+      frequencyData?.length - 1 || 0,
+      Math.max(0, Math.floor(position ** 2.2 * (frequencyData?.length || 1))),
+    );
+    const raw = (frequencyData?.[bin] || 0) / 255;
+    const multiplier = position < 0.15 ? state.bass : position < 0.7 ? state.mid : state.treble;
+    const response = raw > smoothed[index] ? 0.42 : 0.16;
+
+    smoothed[index] += (raw * multiplier - smoothed[index]) * response;
+    output[index] = smoothed[index];
+  }
+
+  return output;
+}
+
+function drawWaveform(data, width, height) {
+  ctx.beginPath();
+
+  data.forEach((value, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = height / 2 + Math.sin(index * 0.08 + demoTime * 3) * value * height * 0.35 * state.amp;
+    index ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+
+  ctx.strokeStyle = color(0.45);
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.9;
+  ctx.stroke();
+}
+
+function drawRadial(data, width, height) {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = Math.min(width, height) * 0.18;
+
+  ctx.beginPath();
+  data.forEach((value, index) => {
+    const angle = (index / data.length) * Math.PI * 2;
+    const currentRadius = radius + value * Math.min(width, height) * 0.3 * state.amp;
+    const x = centerX + Math.cos(angle) * currentRadius;
+    const y = centerY + Math.sin(angle) * currentRadius;
+    index ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.closePath();
+  ctx.strokeStyle = color(0.65);
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function drawParticles(data, width, height) {
+  const count = Math.round(state.count * 2);
+
+  for (let index = 0; index < count; index += 1) {
+    const position = index / count;
+    const value = data[(index * 7) % data.length];
+    const angle = position * Math.PI * 2 + demoTime * 0.5;
+    const radius = value * Math.min(width, height) * 0.4 + 20;
+
+    ctx.fillStyle = color(position);
+    ctx.globalAlpha = 0.25 + value;
+    ctx.beginPath();
+    ctx.arc(
+      width / 2 + Math.cos(angle) * radius,
+      height / 2 + Math.sin(angle) * radius,
+      1 + value * 7,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+}
+
+function drawBars(data, width, height) {
+  const count = Math.max(8, Math.round(state.count));
+  const barWidth = (width / count) * 0.8;
+
+  for (let index = 0; index < count; index += 1) {
+    const position = index / count;
+    const value = data[Math.floor(position * data.length)];
+    const barHeight = value ** 2 * height * 0.72 * state.amp;
+    const x = index * (width / count);
+
+    ctx.fillStyle = color(position);
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(x, height * 0.78 - barHeight, barWidth, Math.max(1, barHeight));
+    ctx.globalAlpha = 0.22;
+    ctx.fillRect(x, height * 0.78 + 4, barWidth, barHeight * 0.35);
+  }
+}
+
+function draw(now = 0) {
+  animationFrame = requestAnimationFrame(draw);
+  const delta = Math.min(0.05, (now - lastFrame) / 1000 || 0.016);
+  lastFrame = now;
+  demoTime += delta;
+  resizeCanvas();
+
+  if (!canvas.value || !ctx) return;
+
+  const width = canvas.value.clientWidth;
+  const height = canvas.value.clientHeight;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = dark.value ? '#0d0c12' : '#f3efe8';
+  ctx.fillRect(0, 0, width, height);
+
+  const data = getSpectrum();
+
+  if (!analyser) {
+    data.forEach((_, index) => {
+      const position = index / data.length;
+      data[index] = Math.max(
+        0,
+        ((Math.sin(demoTime * 4 + position * 18) + 1) / 3) * Math.exp(-position * 2) +
+          (Math.sin(demoTime * 9 + position * 80) + 1) / 12,
+      );
+    });
+  }
+
+  if (preset.value === 'wave') drawWaveform(data, width, height);
+  else if (preset.value === 'radial') drawRadial(data, width, height);
+  else if (preset.value === 'particles') drawParticles(data, width, height);
+  else drawBars(data, width, height);
+
+  ctx.globalAlpha = 1;
+}
+
+async function toggleRecording() {
+  ensureAudio();
+  if (recording.value) {
+    mediaRecorder.stop();
+    return;
+  }
+
+  await audioContext.resume();
+  const stream = canvas.value.captureStream(30);
+  const audioTrack = destination?.stream.getAudioTracks()[0];
+  if (audioTrack) stream.addTrack(audioTrack);
+
+  const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(
+    (type) => MediaRecorder.isTypeSupported(type),
+  );
+
+  chunks = [];
+  mediaRecorder = new MediaRecorder(
+    stream,
+    mimeType ? { mimeType, videoBitsPerSecond: 8_000_000 } : undefined,
+  );
+  mediaRecorder.ondataavailable = (event) => event.data.size && chunks.push(event.data);
+  mediaRecorder.onstop = () => {
+    const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `eq-lab-${preset.value}.webm`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    recording.value = false;
+  };
+  mediaRecorder.start(1_000);
+  recording.value = true;
+}
+
+function toggleTheme() {
+  dark.value = !dark.value;
+  document.documentElement.classList.toggle('dark', dark.value);
+}
+
+onMounted(() => {
+  ctx = canvas.value.getContext('2d', { alpha: false, desynchronized: true });
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  animationFrame = requestAnimationFrame(draw);
+});
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(animationFrame);
+  window.removeEventListener('resize', resizeCanvas);
+  audioContext?.close();
+});
+</script>
+
+<template>
+  <div
+    class="min-h-screen"
+    :class="dark ? 'bg-[#12111a] text-[#f2eee8]' : 'bg-[#f3efe8] text-[#27231e]'"
+  >
+    <header class="flex items-center gap-3 border-b border-white/10 px-5 py-3">
+      <strong class="font-mono tracking-[.2em]">EQ LAB</strong>
+      <span class="text-xs opacity-50">{{ fileName }}</span>
+      <div class="ml-auto flex gap-2">
+        <button class="rounded border border-white/15 px-3 py-2 text-sm" @click="toggleTheme">
+          {{ dark ? '☀' : '☾' }}
+        </button>
+        <button
+          class="rounded bg-[#ff7048] px-3 py-2 text-sm font-semibold text-[#21110c]"
+          @click="toggleRecording"
+        >
+          {{ recording ? '■ Остановить' : '● Записать WebM' }}
+        </button>
+      </div>
+    </header>
+
+    <main class="grid min-h-[calc(100vh-61px)] grid-cols-[260px_1fr_250px] max-[1000px]:grid-cols-1">
+      <aside class="border-r border-white/10 p-4 max-[1000px]:border-r-0 max-[1000px]:border-b">
+        <label class="mb-3 block rounded border border-dashed border-white/20 p-3 text-center text-sm">
+          Открыть аудио
+          <input class="hidden" type="file" accept="audio/*" @change="loadFile" />
+        </label>
+        <button class="mb-4 w-full rounded bg-white/10 px-3 py-2" @click="togglePlay">
+          {{ playing ? '⏸ Пауза' : '▶ Играть' }}
+        </button>
+        <audio ref="audio" class="mb-5 w-full" controls @play="playing = true" @pause="playing = false" />
+
+        <div class="mb-2 font-mono text-xs uppercase tracking-widest opacity-50">Визуализатор</div>
+        <button
+          v-for="visualizer in presets"
+          :key="visualizer.id"
+          class="mb-1 block w-full rounded px-3 py-2 text-left text-sm"
+          :class="preset === visualizer.id ? 'bg-[#ff7048] text-[#21110c]' : 'bg-white/5'"
+          @click="preset = visualizer.id"
+        >
+          {{ visualizer.name }}
+        </button>
+      </aside>
+
+      <section class="flex min-h-0 flex-col items-center justify-center gap-4 p-5">
+        <canvas ref="canvas" class="aspect-video w-full max-w-[1100px] rounded-xl border border-white/10" />
+        <div class="text-center text-xs opacity-50">
+          {{ current.hint }} · {{ recording ? 'идёт запись WebM' : '' }}
+        </div>
+      </section>
+
+      <aside class="border-l border-white/10 p-4 max-[1000px]:border-l-0 max-[1000px]:border-t">
+        <div class="mb-4 font-mono text-xs uppercase tracking-widest opacity-50">
+          Параметры {{ current.name }}
+        </div>
+        <label v-for="([key, config]) in parameters" :key="key" class="mb-4 block text-sm">
+          <span class="mb-1 flex justify-between opacity-70">
+            <span>{{ config[0] }}</span>
+            <b>{{ Number(state[key]).toFixed(2) }}</b>
+          </span>
+          <input
+            v-model.number="state[key]"
+            class="range w-full"
+            type="range"
+            :min="config[1]"
+            :max="config[2]"
+            :step="config[3]"
+          />
+        </label>
+      </aside>
+    </main>
+  </div>
+</template>

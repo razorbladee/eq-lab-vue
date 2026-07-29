@@ -19,8 +19,9 @@
 - [ ] Разбиение visualizers.js по коллекциям.
 
 ## Фаза 3. Экспорт и production UX
-- [x] WebM MVP: Canvas + доступный audio track, countdown, cancel, codec fallback.
-- [ ] Настройки FPS, разрешения, bitrate и длительности.
+- [x] WebM MVP: Canvas + доступный audio track, stop/save, cancel, codec fallback.
+- [x] Настройки FPS, bitrate и опциональной длительности.
+- [ ] Настройка разрешения записи.
 - [ ] PNG/JPEG/WebP export.
 - [ ] Keyboard shortcuts, help и performance mode.
 - [ ] Browser compatibility warning.
@@ -52,6 +53,6 @@
 
 ## Следующие шаги
 
-1. Довести recorder до выбора FPS, bitrate и duration.
-2. Добавить PNG/JPEG/WebP и shortcuts.
-3. Перейти к versioned presets и share URL.
+1. Настройка разрешения записи и PNG/JPEG/WebP.
+2. Keyboard shortcuts, help и performance mode.
+3. Versioned presets + JSON import/export + share URL.

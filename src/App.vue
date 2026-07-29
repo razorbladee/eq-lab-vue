@@ -1,7 +1,7 @@
 <script>
-import { ref, watch, reactive, computed, onMounted } from 'vue';
+import { ref, watch, reactive, computed, onMounted, nextTick } from 'vue';
 import { VIS, VMAP } from './core/visualizers';
-import { ALGOS } from './core/audio';
+import { Audio, ALGOS } from './core/audio';
 import { Engine } from './core/engine';
 import { clamp } from './core/palette';
 
@@ -23,7 +23,7 @@ const MUSIC = {
   ambient:   { bands: [.7, .9, 1.2, 1.1, 1],        smooth: .88, amp: .9,  speed: .55, algo: 'cinematic', trail: .82 },
   rock:      { bands: [1.35, 1.25, 1.45, 1.15, 1.05], smooth: .66, amp: 1.15, speed: 1.1, algo: 'attack', trail: .4 },
   hiphop:    { bands: [1.9, 1.3, .9, .85, 1.1],     smooth: .58, amp: 1.25, speed: .95, algo: 'beatPulse', trail: .55 },
-  classical: { bands: [.8, 1, 1.2, 1.3, 1.35],      smooth: .82, amp: 1,   speed: .7,  algo: 'balanced', trail: .7 },
+  classical: { bands: [.8, 1, 1.2, 1.3, 1.35],      smooth: .82, amp: 1,   speed: .7, algo: 'balanced', trail: .7 },
   podcast:   { bands: [.5, 1.35, 1.8, 1.05, .6],    smooth: .9,  amp: .8,  speed: .45, algo: 'midFocus', trail: .35 }
 };
 
@@ -60,7 +60,6 @@ export default {
     let recorder = null, recordChunks = [];
     const q = ref(''), grpFilter = ref('');
 
-    /* ---------- дефолты параметров для каждого визуализатора ---------- */
     function seedParams() {
       VIS.forEach(v => {
         if (!params[v.id]) params[v.id] = {};
@@ -70,7 +69,6 @@ export default {
       });
     }
 
-    /* ---------- localStorage ---------- */
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
@@ -96,7 +94,6 @@ export default {
       }, 220);
     };
 
-    /* ---------- Плоские снимки для рендер-цикла (без reactive-прокси в горячем коде) ---------- */
     const sync = () => {
       Engine.S = { ...g, playing: playing.value };
       Engine.P = { ...(params[g.preset] || {}) };
@@ -140,7 +137,6 @@ export default {
     const sourceLabel = computed(() =>
       mic.value ? 'Микрофон · live' : fileName.value ? fileName.value : g.demo ? 'Демо-сигнал' : 'Источник не выбран');
 
-    /* ---------- действия ---------- */
     const fmt = v => typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2).replace(/0$/, '')) : v;
     const setP = (k, v) => { params[g.preset][k] = v; };
 
@@ -243,7 +239,6 @@ export default {
       else el.requestFullscreen && el.requestFullscreen();
     }
 
-    /* ---------- монтирование ---------- */
     onMounted(() => {
       Engine.mount(canvasEl.value);
       Engine.onErr = (id, msg) => { err.value = { id, msg }; g.preset = 'bars'; };
@@ -260,7 +255,6 @@ export default {
       el.addEventListener('pause', () => { playing.value = false; });
       el.addEventListener('ended', () => { playing.value = false; });
 
-      // UI-метрики отдельным медленным таймером: реактивность не в rAF
       setInterval(() => {
         fps.value = Engine.fps;
         res.value = Engine.canvas.width + '×' + Engine.canvas.height;
@@ -268,7 +262,6 @@ export default {
         bpm.value = Audio.bpm || '--';
       }, 500);
 
-      // Метры и бит — через transform, без пересчёта лейаута
       const bandsRef = ['bass', 'lowMid', 'mid', 'highMid', 'treble'];
       const paint = () => {
         for (let i = 0; i < 5; i++) {
@@ -335,9 +328,7 @@ export default {
       <button class="btn" @click="snapshot" title="Скачать PNG">PNG</button>
       <button class="btn" :class="{'btn-live':recording}" @click="toggleRecord">{{ recording ? '■ Стоп' : '● WebM' }}</button>
       <button class="btn" @click="toggleFull" title="На весь экран">⛶</button>
-      <button class="btn" @click="toggleTheme" :title="dark ? 'Светлая тема' : 'Тёмная тема'">
-        {{ dark ? '☀' : '☾' }}
-      </button>
+      <button class="btn" @click="toggleTheme" :title="dark ? 'Светлая тема' : 'Тёмная тема'">{{ dark ? '☀' : '☾' }}</button>
       <button class="btn xl:hidden" style="padding:8px 10px" @click="inspOpen=!inspOpen" title="Параметры">⚙</button>
     </div>
   </header>
@@ -351,235 +342,33 @@ export default {
         <summary>Источник</summary>
         <div class="sec-body flex flex-col gap-2.5">
           <div class="grid grid-cols-2 gap-2">
-            <label class="btn" style="cursor:pointer">
-              Файл
-              <input type="file" accept="audio/*" class="hidden" @change="onFile">
-            </label>
-            <button class="btn" :class="{'btn-live':mic}" @click="toggleMic">
-              {{ mic ? 'Стоп мик' : 'Микрофон' }}
-            </button>
+            <label class="btn" style="cursor:pointer">Файл<input type="file" accept="audio/*" class="hidden" @change="onFile"></label>
+            <button class="btn" :class="{'btn-live':mic}" @click="toggleMic">{{ mic ? 'Стоп мик' : 'Микрофон' }}</button>
           </div>
-          <button class="btn btn-primary" @click="togglePlay" :disabled="!hasFile">
-            {{ playing ? '⏸ Пауза' : '▶ Играть' }}
-          </button>
+          <button class="btn btn-primary" @click="togglePlay" :disabled="!hasFile">{{ playing ? '⏸ Пауза' : '▶ Играть' }}</button>
           <audio ref="audioEl" controls preload="metadata"></audio>
-          <label class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">
-            Демо-сигнал без звука
-            <span class="sw" :data-on="g.demo" role="switch" :aria-checked="g.demo" tabindex="0"
-                  @click="g.demo=!g.demo" @keydown.space.prevent="g.demo=!g.demo"><i></i></span>
-          </label>
-          <p class="text-[11.5px]" style="color:var(--ink-3)" v-if="!hasFile && !mic">
-            Перетащите трек на кадр или включите микрофон. Пока источника нет, сцену ведёт синтетический бит.
-          </p>
+          <label class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">Демо-сигнал без звука<span class="sw" :data-on="g.demo" role="switch" :aria-checked="g.demo" tabindex="0" @click="g.demo=!g.demo" @keydown.space.prevent="g.demo=!g.demo"><i></i></span></label>
+          <p class="text-[11.5px]" style="color:var(--ink-3)" v-if="!hasFile && !mic">Перетащите трек на кадр или включите микрофон. Пока источника нет, сцену ведёт синтетический бит.</p>
         </div>
       </details>
 
-      <details class="sec" open>
-        <summary>Визуализатор · {{ filtered.length }}</summary>
-        <div class="sec-body flex flex-col gap-2.5">
-          <input type="search" v-model="q" placeholder="Поиск: aurora, bars, tunnel…">
-          <div class="flex flex-wrap gap-1.5">
-            <button class="chip" v-for="grp in groupList" :key="grp.id"
-                    :aria-pressed="grpFilter===grp.id" @click="grpFilter = grpFilter===grp.id ? '' : grp.id">
-              {{ grp.name }}
-            </button>
-          </div>
-          <div class="plist" role="listbox">
-            <button v-for="v in filtered" :key="v.id" class="pitem" role="option"
-                    :aria-current="g.preset===v.id" @click="g.preset=v.id">
-              <b></b><span>{{ v.name }}</span><em>{{ groupShort[v.group] }}</em>
-            </button>
-            <p v-if="!filtered.length" class="text-[12px] py-3 px-1" style="color:var(--ink-3)">
-              Ничего не нашлось. Сбросьте фильтр.
-            </p>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <button class="btn" @click="cyclePreset(-1)">← Пред</button>
-            <button class="btn" @click="cyclePreset(1)">След →</button>
-          </div>
-          <button class="btn" @click="randomPreset">🎲 Случайный</button>
-        </div>
-      </details>
+      <details class="sec" open><summary>Визуализатор · {{ filtered.length }}</summary><div class="sec-body flex flex-col gap-2.5"><input type="search" v-model="q" placeholder="Поиск: aurora, bars…"><div class="flex flex-wrap gap-1.5"><button class="chip" v-for="grp in groupList" :key="grp.id" :aria-pressed="grpFilter===grp.id" @click="grpFilter = grpFilter===grp.id ? '' : grp.id">{{ grp.name }}</button></div><div class="plist" role="listbox"><button v-for="v in filtered" :key="v.id" class="pitem" role="option" :aria-current="g.preset===v.id" @click="g.preset=v.id"><b></b><span>{{ v.name }}</span><em>{{ groupShort[v.group] }}</em></button><p v-if="!filtered.length" class="text-[12px] py-3 px-1" style="color:var(--ink-3)">Ничего не нашлось. Сбросьте фильтр.</p></div><div class="grid grid-cols-2 gap-2"><button class="btn" @click="cyclePreset(-1)">← Пред</button><button class="btn" @click="cyclePreset(1)">След →</button></div><button class="btn" @click="randomPreset">🎲 Случайный</button></div></details>
 
-      <details class="sec" open>
-        <summary>Реакция на звук</summary>
-        <div class="sec-body flex flex-col gap-3">
-          <label class="block">
-            <span class="plabel">Алгоритм</span>
-            <select v-model="g.algo">
-              <option v-for="a in algoList" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
-          </label>
-          <p class="text-[11.5px] -mt-1" style="color:var(--ink-3)">{{ algoHint }}</p>
-          <label class="block">
-            <span class="plabel">Жанровый пресет</span>
-            <select v-model="g.music" @change="applyMusic">
-              <option value="custom">Custom</option>
-              <option value="edm">EDM / Bass</option>
-              <option value="ambient">Ambient</option>
-              <option value="rock">Rock</option>
-              <option value="hiphop">Hip-Hop</option>
-              <option value="classical">Classical</option>
-              <option value="podcast">Voice / Podcast</option>
-            </select>
-          </label>
-          <label class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">
-            Авто-усиление (AGC)
-            <span class="sw" :data-on="g.agc" role="switch" :aria-checked="g.agc" tabindex="0"
-                  @click="g.agc=!g.agc" @keydown.space.prevent="g.agc=!g.agc"><i></i></span>
-          </label>
-          <div v-for="k in globalKeys.react" :key="k">
-            <span class="plabel">{{ gschema[k].label }}<span class="pval">{{ fmt(g[k]) }}</span></span>
-            <input type="range" :min="gschema[k].min" :max="gschema[k].max" :step="gschema[k].step"
-                   :value="g[k]" @input="g[k]=+$event.target.value">
-          </div>
-          <div class="hr"></div>
-          <span class="mono text-[10px] tracking-[0.13em] uppercase" style="color:var(--ink-3)">Полосы</span>
-          <div v-for="b in bandKeys" :key="b.k">
-            <span class="plabel">{{ b.label }}<span class="pval">{{ fmt(g[b.k]) }}×</span></span>
-            <input type="range" min="0" max="2.5" step="0.05" :value="g[b.k]" @input="g[b.k]=+$event.target.value">
-          </div>
-        </div>
-      </details>
+      <details class="sec" open><summary>Реакция на звук</summary><div class="sec-body flex flex-col gap-3"><label class="block"><span class="plabel">Алгоритм</span><select v-model="g.algo"><option v-for="a in algoList" :key="a.id" :value="a.id">{{ a.name }}</option></select></label><p class="text-[11.5px] -mt-1" style="color:var(--ink-3)">{{ algoHint }}</p><label class="block"><span class="plabel">Жанровый пресет</span><select v-model="g.music" @change="applyMusic"><option value="custom">Custom</option><option value="edm">EDM / Bass</option><option value="ambient">Ambient</option><option value="rock">Rock</option><option value="hiphop">Hip-Hop</option><option value="classical">Classical</option><option value="podcast">Voice / Podcast</option></select></label><label class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">Авто-усиление (AGC)<span class="sw" :data-on="g.agc" role="switch" :aria-checked="g.agc" tabindex="0" @click="g.agc=!g.agc" @keydown.space.prevent="g.agc=!g.agc"><i></i></span></label><div v-for="k in globalKeys.react" :key="k"><span class="plabel">{{ gschema[k].label }}<span class="pval">{{ fmt(g[k]) }}</span></span><input type="range" :min="gschema[k].min" :max="gschema[k].max" :step="gschema[k].step" :value="g[k]" @input="g[k]=+$event.target.value"></div><div class="hr"></div><span class="mono text-[10px] tracking-[0.13em] uppercase" style="color:var(--ink-3)">Полосы</span><div v-for="b in bandKeys" :key="b.k"><span class="plabel">{{ b.label }}<span class="pval">{{ fmt(g[b.k]) }}×</span></span><input type="range" min="0" max="2.5" step="0.05" :value="g[b.k]" @input="g[b.k]=+$event.target.value"></div></div></details>
 
-      <details class="sec">
-        <summary>Цвет</summary>
-        <div class="sec-body flex flex-col gap-3">
-          <label class="block">
-            <span class="plabel">Режим</span>
-            <select v-model="g.colorMode">
-              <option value="duo">Дуо-градиент</option>
-              <option value="single">Один цвет</option>
-              <option value="spectrum">Спектр</option>
-              <option value="split">Сплит (жёсткий)</option>
-            </select>
-          </label>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="block"><span class="plabel">A</span><input type="color" v-model="g.c1"></label>
-            <label class="block"><span class="plabel">B</span><input type="color" v-model="g.c2"></label>
-          </div>
-          <div class="flex flex-wrap gap-1.5">
-            <button class="chip" v-for="p in palettes" :key="p.name" @click="setPalette(p)">{{ p.name }}</button>
-          </div>
-          <div>
-            <span class="plabel">Прокрутка оттенка<span class="pval">{{ fmt(g.cycle) }}</span></span>
-            <input type="range" min="0" max="2" step="0.02" :value="g.cycle" @input="g.cycle=+$event.target.value">
-          </div>
-          <label class="block">
-            <span class="plabel">Фон кадра</span>
-            <select v-model="g.canvasBg">
-              <option value="ink">Ink</option>
-              <option value="slate">Slate</option>
-              <option value="paper">Paper</option>
-              <option value="theme">По теме</option>
-            </select>
-          </label>
-        </div>
-      </details>
+      <details class="sec"><summary>Цвет</summary><div class="sec-body flex flex-col gap-3"><label class="block"><span class="plabel">Режим</span><select v-model="g.colorMode"><option value="duo">Дуо-градиент</option><option value="single">Один цвет</option><option value="spectrum">Спектр</option><option value="split">Сплит (жёсткий)</option></select></label><div class="grid grid-cols-2 gap-2"><label class="block"><span class="plabel">A</span><input type="color" v-model="g.c1"></label><label class="block"><span class="plabel">B</span><input type="color" v-model="g.c2"></label></div><div class="flex flex-wrap gap-1.5"><button class="chip" v-for="p in palettes" :key="p.name" @click="setPalette(p)">{{ p.name }}</button></div><div><span class="plabel">Прокрутка оттенка<span class="pval">{{ fmt(g.cycle) }}</span></span><input type="range" min="0" max="2" step="0.02" :value="g.cycle" @input="g.cycle=+$event.target.value"></div><label class="block"><span class="plabel">Фон кадра</span><select v-model="g.canvasBg"><option value="ink">Ink</option><option value="slate">Slate</option><option value="paper">Paper</option><option value="theme">По теме</option></select></label></div></details>
 
-      <details class="sec">
-        <summary>Кадр и движение</summary>
-        <div class="sec-body flex flex-col gap-3">
-          <div v-for="k in globalKeys.frame" :key="k">
-            <span class="plabel">{{ gschema[k].label }}<span class="pval">{{ fmt(g[k]) }}</span></span>
-            <input type="range" :min="gschema[k].min" :max="gschema[k].max" :step="gschema[k].step"
-                   :value="g[k]" @input="g[k]=+$event.target.value">
-          </div>
-          <label class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">
-            Адаптивное качество
-            <span class="sw" :data-on="g.autoQuality" role="switch" :aria-checked="g.autoQuality" tabindex="0"
-                  @click="g.autoQuality=!g.autoQuality" @keydown.space.prevent="g.autoQuality=!g.autoQuality"><i></i></span>
-          </label>
-          <button class="btn" @click="resetFrame">Сбросить кадр</button>
-        </div>
-      </details>
+      <details class="sec"><summary>Кадр и движение</summary><div class="sec-body flex flex-col gap-3"><div v-for="k in globalKeys.frame" :key="k"><span class="plabel">{{ gschema[k].label }}<span class="pval">{{ fmt(g[k]) }}</span></span><input type="range" :min="gschema[k].min" :max="gschema[k].max" :step="gschema[k].step" :value="g[k]" @input="g[k]=+$event.target.value"></div><label class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">Адаптивное качество<span class="sw" :data-on="g.autoQuality" role="switch" :aria-checked="g.autoQuality" tabindex="0" @click="g.autoQuality=!g.autoQuality" @keydown.space.prevent="g.autoQuality=!g.autoQuality"><i></i></span></label><button class="btn" @click="resetFrame">Сбросить кадр</button></div></details>
 
-      <details class="sec">
-        <summary>Горячие клавиши</summary>
-        <div class="sec-body flex flex-col gap-2 text-[12px]" style="color:var(--ink-2)">
-          <div class="flex justify-between"><span>Play / Pause</span><kbd>Space</kbd></div>
-          <div class="flex justify-between"><span>Смена визуализатора</span><kbd>← →</kbd></div>
-          <div class="flex justify-between"><span>Случайный</span><kbd>R</kbd></div>
-          <div class="flex justify-between"><span>Тема</span><kbd>T</kbd></div>
-          <div class="flex justify-between"><span>Полный экран</span><kbd>F</kbd></div>
-        </div>
-      </details>
+      <details class="sec"><summary>Горячие клавиши</summary><div class="sec-body flex flex-col gap-2 text-[12px]" style="color:var(--ink-2)"><div class="flex justify-between"><span>Play / Pause</span><kbd>Space</kbd></div><div class="flex justify-between"><span>Смена визуализатора</span><kbd>← →</kbd></div><div class="flex justify-between"><span>Случайный</span><kbd>R</kbd></div><div class="flex justify-between"><span>Тема</span><kbd>T</kbd></div><div class="flex justify-between"><span>Полный экран</span><kbd>F</kbd></div></div></details>
     </aside>
 
-    <!-- ================= СЦЕНА ================= -->
-    <main class="stage" ref="stageEl">
-      <div class="frame" ref="frameEl" :style="frameStyle"
-           @dragover.prevent="drag=true" @dragleave="drag=false" @drop.prevent="onDrop">
-        <canvas ref="canvasEl"></canvas>
-        <div class="drop" v-if="drag">Отпустите трек</div>
-      </div>
+    <main class="stage" ref="stageEl"><div class="frame" ref="frameEl" :style="frameStyle" @dragover.prevent="drag=true" @dragleave="drag=false" @drop.prevent="onDrop"><canvas ref="canvasEl"></canvas><div class="drop" v-if="drag">Отпустите трек</div></div><div class="stage-foot flex items-center gap-4"><div class="flex-1 grid grid-cols-5 gap-2"><div v-for="(b,i) in bandKeys" :key="b.k"><div class="meter" :class="{alt:i>2}"><i :ref="el => meterEls[i] = el"></i></div><span class="mono text-[9px] tracking-[0.1em] uppercase" style="color:var(--ink-3)">{{ b.short }}</span></div></div><div class="flex items-center gap-2 mono text-[10px] tracking-[0.12em] uppercase" style="color:var(--ink-3)"><span ref="beatEl" style="width:9px;height:9px;border-radius:50%;background:var(--accent);opacity:.2;transition:opacity .09s linear"></span>BEAT · {{ bpm }} BPM</div></div><p v-if="err" class="mono text-[11px] max-w-[70ch] text-center" style="color:var(--accent)">Визуализатор «{{ err.id }}» упал: {{ err.msg }}. Переключён на Spectrum Bars.</p></main>
 
-      <div class="stage-foot flex items-center gap-4">
-        <div class="flex-1 grid grid-cols-5 gap-2">
-          <div v-for="(b,i) in bandKeys" :key="b.k">
-            <div class="meter" :class="{alt:i>2}"><i :ref="el => meterEls[i] = el"></i></div>
-            <span class="mono text-[9px] tracking-[0.1em] uppercase" style="color:var(--ink-3)">{{ b.short }}</span>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 mono text-[10px] tracking-[0.12em] uppercase" style="color:var(--ink-3)">
-          <span ref="beatEl" style="width:9px;height:9px;border-radius:50%;background:var(--accent);
-                opacity:.2;transition:opacity .09s linear"></span>
-          BEAT · {{ bpm }} BPM
-        </div>
-      </div>
-
-      <p v-if="err" class="mono text-[11px] max-w-[70ch] text-center" style="color:var(--accent)">
-        Визуализатор «{{ err.id }}» упал: {{ err.msg }}. Переключён на Spectrum Bars.
-      </p>
-    </main>
-
-    <!-- ================= ПРАВАЯ ПАНЕЛЬ ================= -->
-    <aside class="insp" :class="{open:inspOpen}">
-      <div class="px-4 pt-4 pb-3 border-b sticky top-0 z-10" style="border-color:var(--line);background:var(--panel)">
-        <div class="mono text-[10px] tracking-[0.14em] uppercase" style="color:var(--ink-3)">Параметры</div>
-        <h2 class="text-[19px] font-semibold leading-tight mt-1" style="text-wrap:balance">{{ current.name }}</h2>
-        <div class="mono text-[10px] tracking-[0.1em] uppercase mt-1" style="color:var(--ink-3)">
-          {{ groupShort[current.group] }} · {{ paramKeys.length }} контролов
-        </div>
-        <div class="grid grid-cols-2 gap-2 mt-3">
-          <button class="btn" @click="resetParams">Сброс</button>
-          <button class="btn" @click="randomParams">🎲 Случайно</button>
-        </div>
-      </div>
-
-      <div class="px-4 py-4 flex flex-col gap-3.5">
-        <template v-for="k in paramKeys" :key="k">
-          <label v-if="current.params[k].type==='toggle'"
-                 class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">
-            {{ current.params[k].label }}
-            <span class="sw" :data-on="!!p[k]" role="switch" :aria-checked="!!p[k]" tabindex="0"
-                  @click="setP(k,!p[k])" @keydown.space.prevent="setP(k,!p[k])"><i></i></span>
-          </label>
-
-          <label v-else-if="current.params[k].type==='select'" class="block">
-            <span class="plabel">{{ current.params[k].label }}</span>
-            <select :value="p[k]" @change="setP(k,$event.target.value)">
-              <option v-for="o in current.params[k].options" :key="o" :value="o">{{ o }}</option>
-            </select>
-          </label>
-
-          <div v-else>
-            <span class="plabel">{{ current.params[k].label }}<span class="pval">{{ fmt(p[k]) }}</span></span>
-            <input type="range" :min="current.params[k].min" :max="current.params[k].max"
-                   :step="current.params[k].step" :value="p[k]" @input="setP(k,+$event.target.value)">
-          </div>
-        </template>
-
-        <div class="hr"></div>
-        <p class="text-[11.5px]" style="color:var(--ink-3)">
-          Каждый визуализатор держит свой набор значений. Всё пишется в память браузера и переживает перезагрузку.
-        </p>
-      </div>
-    </aside>
+    <aside class="insp" :class="{open:inspOpen}"><div class="px-4 pt-4 pb-3 border-b sticky top-0 z-10" style="border-color:var(--line);background:var(--panel)"><div class="mono text-[10px] tracking-[0.14em] uppercase" style="color:var(--ink-3)">Параметры</div><h2 class="text-[19px] font-semibold leading-tight mt-1" style="text-wrap:balance">{{ current.name }}</h2><div class="mono text-[10px] tracking-[0.1em] uppercase mt-1" style="color:var(--ink-3)">{{ groupShort[current.group] }} · {{ paramKeys.length }} контролов</div><div class="grid grid-cols-2 gap-2 mt-3"><button class="btn" @click="resetParams">Сброс</button><button class="btn" @click="randomParams">🎲 Случайно</button></div></div><div class="px-4 py-4 flex flex-col gap-3.5"><template v-for="k in paramKeys" :key="k"><label v-if="current.params[k].type==='toggle'" class="flex items-center justify-between gap-3 text-[12.5px]" style="color:var(--ink-2)">{{ current.params[k].label }}<span class="sw" :data-on="!!p[k]" role="switch" :aria-checked="!!p[k]" tabindex="0" @click="setP(k,!p[k])" @keydown.space.prevent="setP(k,!p[k])"><i></i></span></label><label v-else-if="current.params[k].type==='select'" class="block"><span class="plabel">{{ current.params[k].label }}</span><select :value="p[k]" @change="setP(k,$event.target.value)"><option v-for="o in current.params[k].options" :key="o" :value="o">{{ o }}</option></select></label><div v-else><span class="plabel">{{ current.params[k].label }}<span class="pval">{{ fmt(p[k]) }}</span></span><input type="range" :min="current.params[k].min" :max="current.params[k].max" :step="current.params[k].step" :value="p[k]" @input="setP(k,+$event.target.value)"></div></template><div class="hr"></div><p class="text-[11.5px]" style="color:var(--ink-3)">Каждый визуализатор держит свой набор значений. Всё пишется в память браузера и переживает перезагрузку.</p></div></aside>
   </div>
 
   <div class="scrim xl:hidden" v-if="railOpen || inspOpen" @click="railOpen=false;inspOpen=false"></div>
 </div>
-
 
 </template>

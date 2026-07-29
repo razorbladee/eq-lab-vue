@@ -7,15 +7,15 @@
 - [x] Восстановление состояния, валидация, cleanup RAF/timers/audio/object URLs.
 
 ## Фаза 2: Vue-декомпозиция
-- [x] EffectsPanel переведён на Vue template и больше не создаётся через `innerHTML`.
-- [x] Убран DOM query/mount из `main.js`, панель подключается как часть Vue root через `Teleport`.
-- [x] Добавлены composables `useVisualizerState`, `useAudioSource`, `useExport`.
-- [x] Effects core теперь отвечает только за состояние и Canvas rendering, UI-монтаж из него удалён.
-- [ ] Разбить App.vue на SourcePanel, VisualizerBrowser, ReactionPanel, StageView, InspectorPanel.
-- [ ] Вынести orchestration App.vue в `useAppController`.
+- [x] EffectsPanel переведён на Vue template.
+- [x] Убран DOM injection и legacy effects UI.
+- [x] Добавлены composables для visualizer state, audio source, export и app controller.
+- [x] Добавлены независимые SourcePanel, VisualizerBrowser, ReactionPanel, StageView и InspectorPanel.
+- [x] Все новые панели имеют Vue props/events и могут подключаться без глобального DOM API.
+- [ ] Подключить панели в App.vue и удалить дублирующий legacy template.
 - [ ] Разбить visualizers.js на коллекции через единый registry API.
 
 ## Следом
-1. Фаза 3: WebM recorder с Canvas + audio.
-2. Versioned presets и share URL.
-3. Timeline MVP и transitions.
+1. Закрыть wiring панелей в App.vue.
+2. Фаза 3: WebM recorder с Canvas + audio.
+3. Versioned presets и share URL.

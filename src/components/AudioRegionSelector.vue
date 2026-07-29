@@ -145,7 +145,7 @@ const onPointerMove = (e) => {
     newTo = newFrom + range;
     emit('update:from', newFrom);
     emit('update:to', newTo);
-
+  }
 };
 
 const onPointerUp = () => {

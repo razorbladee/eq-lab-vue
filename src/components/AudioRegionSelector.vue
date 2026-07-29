@@ -75,20 +75,24 @@ const draw = () => {
   ctx.fillStyle = accent ? `oklch(${accent})` : '#ff5a2d';
 
   const p = peaks.value;
-  const step = w / p.length;
-  const barWidth = Math.max(1, step - 0.5);
+  const step = w / (p.length - 1);
 
   ctx.beginPath();
+  ctx.moveTo(0, h / 2);
+
+  // Draw top half
   for (let i = 0; i < p.length; i++) {
-    const val = Math.max(2, p[i] * h * 0.9);
-    const x = i * step;
-    const y = (h - val) / 2;
-    if (ctx.roundRect) {
-      ctx.roundRect(x, y, barWidth, val, barWidth / 2);
-    } else {
-      ctx.rect(x, y, barWidth, val);
-    }
+    const val = p[i] * h * 0.9;
+    ctx.lineTo(i * step, (h - val) / 2);
   }
+
+  // Draw bottom half
+  for (let i = p.length - 1; i >= 0; i--) {
+    const val = p[i] * h * 0.9;
+    ctx.lineTo(i * step, (h + val) / 2);
+  }
+
+  ctx.closePath();
   ctx.fill();
 };
 
@@ -105,7 +109,7 @@ watch(
       const arrayBuffer = await res.arrayBuffer();
       if (!Audio.ac) Audio.ensure(document.createElement('audio'));
       const audioBuffer = await Audio.ac.decodeAudioData(arrayBuffer);
-      peaks.value = await extractPeaks(audioBuffer, 150);
+      peaks.value = await extractPeaks(audioBuffer, 800);
       draw();
     } catch (err) {
       console.error('Waveform err:', err);

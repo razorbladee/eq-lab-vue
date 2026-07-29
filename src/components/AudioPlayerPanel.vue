@@ -9,7 +9,6 @@ const duration = ref(0),
   current = ref(0),
   from = ref(0),
   to = ref(0);
-const hasSelection = computed(() => duration.value > 0 && to.value > from.value + 0.05);
 const fmt = (value) => {
   const s = Math.max(0, Math.floor(Number(value) || 0));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -96,13 +95,6 @@ watch([from, to], setSelection);
       :disabled="!duration"
       @input="seek"
     />
-    <div class="selection-head">
-      <span class="mono">Выделение для WebM</span
-      ><span class="mono"
-        >{{ fmt(from) }} → {{ fmt(to) }}
-        <b>({{ hasSelection ? fmt(to - from) : 'весь трек' }})</b></span
-      >
-    </div>
     <AudioRegionSelector
       v-if="duration"
       :src="audioSrc"

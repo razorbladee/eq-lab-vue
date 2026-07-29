@@ -9,7 +9,7 @@ export function useAudioSource(audioElement) {
   const error = ref(null);
   let objectUrl = '';
 
-  const loadFile = file => {
+  const loadFile = async (file) => {
     if (!file) return;
     if (file.type && !file.type.startsWith('audio/')) {
       error.value = 'Выберите поддерживаемый аудиофайл';
@@ -17,6 +17,9 @@ export function useAudioSource(audioElement) {
     }
     const element = audioElement.value;
     Audio.ensure(element);
+    if (Audio.ac && Audio.ac.state === 'suspended') {
+      await Audio.ac.resume();
+    }
     revoke(objectUrl);
     objectUrl = URL.createObjectURL(file);
     element.src = objectUrl;
@@ -24,15 +27,31 @@ export function useAudioSource(audioElement) {
     hasFile.value = true;
     microphone.value = false;
     Audio.micOff();
-    element.play().catch(() => { error.value = 'Браузер не смог воспроизвести этот формат'; });
+    element.play().catch(() => {
+      error.value = 'Браузер не смог воспроизвести этот формат';
+    });
   };
   const toggleMicrophone = async () => {
     Audio.ensure(audioElement.value);
     await Audio.ac.resume();
-    if (microphone.value) { Audio.micOff(); microphone.value = false; return; }
-    try { audioElement.value.pause(); await Audio.micOn(); microphone.value = true; error.value = null; }
-    catch (reason) { error.value = reason?.message || 'Нет доступа к микрофону'; }
+    if (microphone.value) {
+      Audio.micOff();
+      microphone.value = false;
+      return;
+    }
+    try {
+      audioElement.value.pause();
+      await Audio.micOn();
+      microphone.value = true;
+      error.value = null;
+    } catch (reason) {
+      error.value = reason?.message || 'Нет доступа к микрофону';
+    }
   };
-  onUnmounted(() => { revoke(objectUrl); objectUrl = ''; Audio.micOff(); });
+  onUnmounted(() => {
+    revoke(objectUrl);
+    objectUrl = '';
+    Audio.micOff();
+  });
   return { fileName, hasFile, microphone, error, loadFile, toggleMicrophone };
 }

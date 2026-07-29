@@ -13,10 +13,21 @@ async function disposeAudio(audioElement) {
     audioElement.load();
   }
   for (const node of [Audio.mediaSrc, Audio.micSrc, Audio.an, Audio.out, Audio.sink]) {
-    try { node?.disconnect(); } catch { /* already disconnected */ }
+    try {
+      node?.disconnect();
+    } catch {
+      /* already disconnected */
+    }
   }
   const context = Audio.ac;
-  Audio.ac = Audio.an = Audio.mediaSrc = Audio.micSrc = Audio.out = Audio.sink = Audio.recordDest = null;
+  Audio.ac =
+    Audio.an =
+    Audio.mediaSrc =
+    Audio.micSrc =
+    Audio.out =
+    Audio.sink =
+    Audio.recordDest =
+      null;
   Audio.ready = false;
   Audio.live = false;
   if (context && context.state !== 'closed') await context.close().catch(() => {});

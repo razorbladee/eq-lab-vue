@@ -1,6 +1,6 @@
 name: Bug report
 description: Report a reproducible EQ Lab problem
-title: "bug: "
+title: 'bug: '
 labels: [bug]
 body:
   - type: textarea

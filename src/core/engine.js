@@ -2,15 +2,16 @@ import { Palette, clamp } from './palette.js';
 import { Audio } from './audio.js';
 import { VIS, VMAP } from './visualizers.js';
 
-/**
- * Рендер-цикл: один canvas, adaptive quality, состояние на визуализатор.
- * Наружу нужны только mount() / resize() / start() / stop() и поля S, P, onErr.
- */
+/* ------------------------------------------------------------------
+   4. РЕНДЕР-ДВИЖОК
+   Канвас, DPR, адаптивное качество, состояние сцен, кадровый цикл.
+   ------------------------------------------------------------------ */
+
 const Engine = {
-  canvas: null, ctx: null, W: 0, H: 0, DPR: 1, raf: 0, last: 0,
+  canvas: null, ctx: null, g: null, W: 0, H: 0, DPR: 1, raf: 0, last: 0,
   q: 1, ema: 16, frames: 0, fpsAcc: 0, fps: 60,
   states: Object.create(null),
-  S: null, P: null, onErr: null, g: null,
+  S: null, P: null, onErr: null,
   bgOf: { ink: '#0d0c12', slate: '#141a1f', paper: '#f5f2ec' },
 
   mount(canvas) {
@@ -30,21 +31,22 @@ const Engine = {
 
   /** Пересчёт буфера. Пиксели ограничены, чтобы 4K-мониторы не убивали FPS. */
   resize() {
-    const c = this.canvas;
-    if (!c || !this.g) return;
-    const r = c.getBoundingClientRect();
-    if (r.width < 2 || r.height < 2) return;
+    const c = this.canvas, r = c.getBoundingClientRect();
+    if (!c || r.width < 2 || r.height < 2) return;
     const MAXPX = 2.6e6;
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     const px = r.width * r.height * dpr * dpr;
     if (px > MAXPX) dpr *= Math.sqrt(MAXPX / px);
     const bw = Math.max(2, Math.round(r.width * dpr)), bh = Math.max(2, Math.round(r.height * dpr));
-    // CSS-геометрию обновляем всегда: буфер может совпасть, а размер кадра — нет
+
+    // Геометрию в CSS-пикселях обновляем всегда, даже если размер буфера не
+    // изменился: иначе центр сцены залипает в (0,0) и половина сцен пуста.
     this.DPR = dpr; this.W = r.width; this.H = r.height;
     this.g.w = r.width; this.g.h = r.height; this.g.cx = r.width / 2; this.g.cy = r.height / 2;
+
     if (c.width === bw && c.height === bh) return;
     c.width = bw; c.height = bh;
-    // Смена формата = новая геометрия: сбрасываем состояния и кэши
+    // Смена формата = новая геометрия: сбрасываем состояния сцен и кэши
     this.states = Object.create(null);
     Palette.sprites.fill(null);
     this.paintBg();
@@ -57,13 +59,9 @@ const Engine = {
     c.fillRect(0, 0, this.canvas.width, this.canvas.height);
   },
 
-  /** Состояние сцены. Создаётся лениво, здесь же дёргаем init() визуализатора. */
-  state(vis) {
-    let s = this.states[vis.id];
-    if (!s) {
-      s = this.states[vis.id] = {};
-      if (typeof vis.init === 'function') vis.init(this.g, s);
-    }
+  state(id) {
+    let s = this.states[id];
+    if (!s) s = this.states[id] = {};
     return s;
   },
 
@@ -85,7 +83,8 @@ const Engine = {
 
   tick(dt, now) {
     const S = this.S, P = this.P;
-    if (!S) return;
+    if (!S || !this.canvas) return;
+    if (!this.W || !this.H) { this.resize(); if (!this.W || !this.H) return; }
 
     // Адаптивное качество: держим ~60 FPS даже на тяжёлых сценах
     this.ema += ((dt * 1000) - this.ema) * .08;
@@ -114,13 +113,20 @@ const Engine = {
 
     const vis = VMAP[S.preset] || VIS[0];
     const g = this.g;
-    g.dt = dt; g.t += dt * S.speed; g.q = this.q; g.S = S; g.p = P; g.st = this.state(vis);
+    g.dt = dt; g.t += dt * S.speed; g.q = this.q; g.S = S; g.p = P; g.st = this.state(vis.id);
 
     ctx.save();
     ctx.translate(W / 2 + (S.posX - 50) * W / 100, H / 2 + (S.posY - 50) * H / 100);
     ctx.scale(S.zoomW, S.zoomH);
     ctx.translate(-W / 2, -H / 2);
-    ctx.lineJoin = 'round';
+
+    // Полный сброс состояния ctx: сцены не должны наследовать друг у друга
+    // lineCap, толщину, шрифт и сглаживание картинок.
+    ctx.lineJoin = 'round'; ctx.lineCap = 'butt'; ctx.lineWidth = 1;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '400 12px "Space Mono",ui-monospace,monospace';
+    ctx.imageSmoothingEnabled = true;
+
     try {
       vis.draw(g);
     } catch (e) {

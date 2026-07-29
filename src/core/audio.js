@@ -1,4 +1,10 @@
 import { clamp } from './palette.js';
+
+/* ------------------------------------------------------------------
+   2. АУДИО-ДВИЖОК
+   Лог-полосы, огибающие, AGC, детект бита и BPM, демо-сигнал.
+   ------------------------------------------------------------------ */
+
 const BANDS = 160;
 const FFT = 4096;
 
@@ -27,7 +33,8 @@ const ALGOS = {
 };
 
 const Audio = {
-  ac: null, an: null, monitor: null, mediaSrc: null, micSrc: null, micStream: null, rate: 48000,
+  ac: null, an: null, mediaSrc: null, micSrc: null, micStream: null, rate: 48000,
+  out: null, sink: null, recordDest: null,
   raw: new Uint8Array(FFT / 2),
   time: new Uint8Array(2048),
   bands: new Float32Array(BANDS),
@@ -39,8 +46,21 @@ const Audio = {
   bass: 0, lowMid: 0, mid: 0, highMid: 0, treble: 0, level: 0,
   beat: 0, flux: 0, beats: 0, bpm: 0,
   env: .35, hist: new Float32Array(48), hp: 0, lastBeat: -1, beatTimes: [], t: 0,
-  ready: false, live: false, recordDest: null,
+  ready: false, live: false,
 
+  /**
+   * Строит граф один раз. Источник для <audio> по спецификации можно создать
+   * ровно один раз на элемент, поэтому всё держится на одном AudioContext.
+   *
+   *   mediaSrc ──> analyser ──> sink(gain 0) ──> destination   (только анализ)
+   *            └─> out ──┬──> destination                      (слышно)
+   *                      └──> recordDest                       (пишется)
+   *   micSrc  ──> analyser                                     (анализ)
+   *           └─> recordDest                                   (пишется, но не в колонки)
+   *
+   * Микрофон намеренно не доходит до destination: иначе самозавод.
+   * Тихий sink нужен, чтобы граф рендерился, когда единственный источник — микрофон.
+   */
   ensure(el) {
     if (this.ac) return this.ac;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -51,24 +71,29 @@ const Audio = {
     this.an.smoothingTimeConstant = .58;
     this.raw = new Uint8Array(this.an.frequencyBinCount);
     this.time = new Uint8Array(this.an.fftSize);
-    // Источник для <audio> создаётся ровно один раз.
+
+    this.out = this.ac.createGain();
+    this.out.gain.value = 1;
+    this.out.connect(this.ac.destination);
+
+    this.recordDest = this.ac.createMediaStreamDestination();
+    this.out.connect(this.recordDest);
+
+    this.sink = this.ac.createGain();
+    this.sink.gain.value = 0;
+    this.an.connect(this.sink);
+    this.sink.connect(this.ac.destination);
+
     this.mediaSrc = this.ac.createMediaElementSource(el);
     this.mediaSrc.connect(this.an);
-    // Анализатор -> монитор -> колонки. Монитор глушится на время работы
-    // микрофона: иначе вход возвращается в динамики и получаем свист.
-    this.monitor = this.ac.createGain();
-    this.monitor.gain.value = 1;
-    this.an.connect(this.monitor);
-    this.monitor.connect(this.ac.destination);
-    // Запись слушает анализатор напрямую, поэтому мьют монитора её не глушит.
-    this.recordDest = this.ac.createMediaStreamDestination();
-    this.an.connect(this.recordDest);
+    this.mediaSrc.connect(this.out);
+
     this.map();
     this.ready = true;
     return this.ac;
   },
 
-  /** Лог-раскладка бинов FFT: 28 Гц … 16 кГц. Главный фикс «мёртвой» правой части. */
+  /** Лог-раскладка бинов FFT: 28 Гц … 16 кГц. Правая часть спектра не «мертвеет». */
   map() {
     const bins = this.an ? this.an.frequencyBinCount : FFT / 2;
     const nyq = this.rate / 2, fMin = 28, fMax = Math.min(16000, nyq);
@@ -91,15 +116,18 @@ const Audio = {
   },
 
   async micOn() {
+    if (!this.ac) throw new Error('AudioContext не инициализирован');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Доступ к микрофону требует https или localhost');
+    }
     this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
     this.micSrc = this.ac.createMediaStreamSource(this.micStream);
     this.micSrc.connect(this.an);
-    if (this.monitor) this.monitor.gain.value = 0;
+    if (this.recordDest) this.micSrc.connect(this.recordDest);
   },
   micOff() {
     if (this.micSrc) { this.micSrc.disconnect(); this.micSrc = null; }
     if (this.micStream) { this.micStream.getTracks().forEach(t => t.stop()); this.micStream = null; }
-    if (this.monitor) this.monitor.gain.value = 1;
   },
 
   /** Синтетический сигнал: приложение живое даже без трека. */

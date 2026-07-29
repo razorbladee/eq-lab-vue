@@ -6,6 +6,7 @@ import './core/reference-visualizers.js';
 import './core/reference-detail-visualizers.js';
 import './core/spectrum-lab.js';
 import './core/beyond-spectrum.js';
+import './core/extra-visualizers.js';
 import './core/effects.js';
 import { createApp } from 'vue';
 import App from './App.vue';

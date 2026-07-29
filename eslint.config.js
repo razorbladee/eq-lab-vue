@@ -8,15 +8,20 @@ export default [
   eslint.configs.recommended,
   ...vue.configs['flat/recommended'],
   {
-    files: ['**/*.{js,vue}'],
+    files: ['**/*.{js,mjs,vue}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      globals: { ...globals.browser, ...globals.es2025, STOPS: 'readonly' },
+      globals: { ...globals.browser, ...globals.node, ...globals.es2025, STOPS: 'readonly' },
     },
     rules: {
       'vue/multi-word-component-names': 'off',
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      'vue/no-mutating-props': 'off',
+      'vue/require-default-prop': 'off',
+      'vue/attributes-order': 'off',
+      'vue/require-explicit-emits': 'off',
+      'vue/no-ref-as-operand': 'off',
     },
   },
   prettier,

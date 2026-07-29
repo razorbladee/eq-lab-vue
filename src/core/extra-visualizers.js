@@ -382,3 +382,154 @@ add(
     }
   },
 );
+
+add(
+  'neonPillars',
+  'EXTRA // Neon Pillars',
+  {
+    pillars: R('Столбов', 80, 20, 150, 1),
+    thickness: R('Толщина', 2, 1, 10, 0.5),
+    reflection: R('Отражение', 0.6, 0, 1),
+    neon: R('Неон', 1, 0, 2),
+    dots: T('Точки', true),
+  },
+  (g) => {
+    const { ctx, w, h, A, p, t } = g;
+    const baseY = h * 0.85;
+    const num = Math.round(p.pillars);
+    const step = w / num;
+
+    g.add();
+
+    if (!g.st.parts) g.st.parts = [];
+
+    for (let i = 0; i < num; i++) {
+      const fx = i / (num - 1 || 1);
+      const x = i * step + step / 2;
+
+      let val = A.b(fx);
+      const jitter = Math.sin(i * 13.5 + t * 2) * 0.1;
+      val = Math.max(0.01, val + val * jitter);
+
+      const barHeight = val * h * 0.6;
+      const yTop = baseY - barHeight;
+      const col = g.col(fx);
+      const brightness = Math.min(1, Math.pow(val, 1.5) * 2.5 + 0.1);
+
+      if (p.reflection > 0) {
+        const refHeight = barHeight * p.reflection;
+        ctx.beginPath();
+        ctx.moveTo(x, baseY);
+        ctx.lineTo(x, baseY + refHeight);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = p.thickness;
+        g.alpha(0.15 * p.reflection * brightness);
+        ctx.stroke();
+
+        if (p.dots) {
+          const refTop = baseY + refHeight;
+          ctx.beginPath();
+          ctx.arc(x, refTop, p.thickness, 0, TAU);
+          ctx.fillStyle = col;
+          g.alpha(0.2 * p.reflection * brightness);
+          ctx.fill();
+        }
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(x, baseY);
+      ctx.lineTo(x, yTop);
+
+      ctx.strokeStyle = col;
+      ctx.lineWidth = p.thickness;
+      g.alpha(0.4 + 0.6 * brightness);
+      ctx.stroke();
+
+      if (p.neon > 0 && brightness > 0.1) {
+        const glowInt = p.neon * brightness;
+
+        ctx.beginPath();
+        ctx.moveTo(x, baseY);
+        ctx.lineTo(x, yTop);
+
+        ctx.lineWidth = p.thickness * 3;
+        g.alpha(0.3 * glowInt);
+        ctx.stroke();
+
+        ctx.lineWidth = p.thickness * 8;
+        g.alpha(0.1 * glowInt);
+        ctx.stroke();
+      }
+
+      if (p.dots) {
+        g.alpha(0.5 + 0.5 * brightness);
+        ctx.beginPath();
+        ctx.arc(x, yTop, p.thickness * (1 + brightness * 0.5), 0, TAU);
+        ctx.fillStyle = brightness > 0.6 ? '#fff' : col;
+        ctx.fill();
+
+        if (p.neon > 0 && brightness > 0.1) {
+          const peakGlow = p.neon * brightness;
+          ctx.beginPath();
+          ctx.arc(x, yTop, p.thickness * 4, 0, TAU);
+          ctx.fillStyle = col;
+          g.alpha(0.5 * peakGlow);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(x, yTop, p.thickness * 9, 0, TAU);
+          g.alpha(0.15 * peakGlow);
+          ctx.fill();
+        }
+      }
+
+      if (val > 0.6 && Math.random() < 0.1) {
+        g.st.parts.push({
+          x: x + (Math.random() - 0.5) * p.thickness,
+          y: yTop,
+          vy: 1 + Math.random() * 3,
+          life: 0.5 + Math.random() * 1.5,
+          col: col,
+        });
+      }
+    }
+
+    for (let i = g.st.parts.length - 1; i >= 0; i--) {
+      const pt = g.st.parts[i];
+      pt.y -= pt.vy * g.dt * 60;
+      pt.vy *= 0.98;
+      pt.life -= g.dt;
+      if (pt.life <= 0) {
+        g.st.parts.splice(i, 1);
+        continue;
+      }
+
+      g.alpha(pt.life * p.neon);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, p.thickness * 0.8, 0, TAU);
+      ctx.fillStyle = pt.col;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, p.thickness * 3, 0, TAU);
+      g.alpha(pt.life * p.neon * 0.3);
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(0, baseY);
+    ctx.lineTo(w, baseY);
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    grad.addColorStop(0, g.rgba(0, 0));
+    grad.addColorStop(0.2, g.col(0.2));
+    grad.addColorStop(0.8, g.col(0.8));
+    grad.addColorStop(1, g.rgba(1, 0));
+
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 1;
+    g.alpha(0.5);
+    ctx.stroke();
+
+    g.norm();
+  },
+);

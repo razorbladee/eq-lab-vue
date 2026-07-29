@@ -1,4 +1,5 @@
 <script setup>
+import PanelFrame from './PanelFrame.vue';
 defineProps({ items: Array, selected: String, query: String, group: String, groups: Array, labels: Object, cycle: Function, random: Function });
 defineEmits(['update:selected','update:query','update:group']);
 </script>

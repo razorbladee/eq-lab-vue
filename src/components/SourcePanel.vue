@@ -1,4 +1,5 @@
 <script setup>
+import PanelFrame from './PanelFrame.vue';
 defineProps({ audio: Object, playing: Boolean, microphone: Boolean, hasFile: Boolean, demo: Boolean, loadFile: Function, toggleMicrophone: Function, togglePlay: Function });
 defineEmits(['update:demo']);
 </script>

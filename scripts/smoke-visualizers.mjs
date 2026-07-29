@@ -32,6 +32,7 @@ await import('../src/core/reference-visualizers.js');
 await import('../src/core/reference-detail-visualizers.js');
 await import('../src/core/spectrum-lab.js');
 await import('../src/core/beyond-spectrum.js');
+await import('../src/core/extra-visualizers.js');
 const { VIS, VMAP } = await import('../src/core/visualizers.js');
 const { Audio } = await import('../src/core/audio.js');
 const { Palette } = await import('../src/core/palette.js');

@@ -107,8 +107,8 @@ watch(
     try {
       const res = await fetch(newSrc);
       const arrayBuffer = await res.arrayBuffer();
-      const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-      const ctx = new OfflineCtx(1, 1, 44100);
+      // Create an offline context matching the browser's sample rate or 44100
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       if (ctx.state !== 'closed') ctx.close();
       peaks.value = await extractPeaks(audioBuffer, 800);

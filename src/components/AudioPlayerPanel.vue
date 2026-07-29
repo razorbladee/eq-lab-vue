@@ -75,7 +75,7 @@ watch([from, to], setSelection);
 </script>
 <template>
   <section class="player-panel" aria-label="Аудиоплеер">
-    <PlaybackSeekbar :duration="duration" :current="current" @seek="seek" />
+    <PlaybackSeekbar :duration="duration" :current="current" :from="from" :to="to" @seek="seek" />
     <div class="player-row">
       <button
         type="button"

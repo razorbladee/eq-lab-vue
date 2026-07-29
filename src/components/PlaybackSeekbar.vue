@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 
-const props = defineProps({ duration: Number, current: Number });
+const props = defineProps({ duration: Number, current: Number, from: Number, to: Number });
 const emit = defineEmits(['seek']);
 
 const track = ref(null);
@@ -36,6 +36,16 @@ const onPointerUp = () => {
   <div class="seekbar-wrap" @pointerdown="onPointerDown">
     <div class="seekbar-hitarea"></div>
     <div class="seekbar-track" ref="track">
+      <!-- We can show the WebM region on the seekbar as well for context! -->
+      <div
+        v-if="duration && to > from"
+        class="seekbar-region"
+        :style="{
+          left: (from / duration) * 100 + '%',
+          width: ((to - from) / duration) * 100 + '%',
+        }"
+      ></div>
+
       <div
         class="seekbar-fill"
         :style="{ width: duration ? (current / duration) * 100 + '%' : '0%' }"
@@ -57,6 +67,7 @@ const onPointerUp = () => {
   touch-action: none;
   z-index: 10;
   background: var(--track);
+  border-radius: 3px;
 }
 .seekbar-hitarea {
   position: absolute;
@@ -73,9 +84,18 @@ const onPointerUp = () => {
   right: 0;
   transition: transform 0.15s;
   transform-origin: bottom;
+  border-radius: 3px;
+  overflow: hidden;
 }
 .seekbar-wrap:hover .seekbar-track {
-  transform: scaleY(1.3);
+  transform: scaleY(1.5);
+}
+.seekbar-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: oklch(var(--accent) / 0.25);
+  pointer-events: none;
 }
 .seekbar-fill {
   position: absolute;
@@ -85,11 +105,14 @@ const onPointerUp = () => {
   background: var(--accent);
   pointer-events: none;
 }
+.seekbar-wrap:hover .seekbar-track {
+  overflow: visible;
+}
 .seekbar-knob {
   position: absolute;
   top: 50%;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: var(--accent);
   border-radius: 50%;
   transform: translate(-50%, -50%) scale(0);
@@ -98,6 +121,7 @@ const onPointerUp = () => {
   box-shadow:
     0 0 0 2px var(--panel),
     0 2px 4px rgba(0, 0, 0, 0.5);
+  z-index: 2;
 }
 .seekbar-wrap:hover .seekbar-knob {
   transform: translate(-50%, -50%) scale(1);

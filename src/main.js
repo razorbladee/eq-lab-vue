@@ -8,7 +8,15 @@ import './core/beyond-spectrum.js';
 import './core/effects.js';
 import { createApp } from 'vue';
 import App from './App.vue';
+import EffectsPanel from './components/EffectsPanel.vue';
 import './style.css';
 import './effects.css';
 
-createApp(App).mount('#app');
+const app = createApp(App);
+app.mount('#app');
+const rail = document.querySelector('.rail');
+if (rail && !rail.querySelector('[data-effects-panel]')) {
+  const host = document.createElement('div');
+  rail.appendChild(host);
+  createApp(EffectsPanel).mount(host);
+}

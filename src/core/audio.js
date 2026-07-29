@@ -27,7 +27,7 @@ const ALGOS = {
 };
 
 const Audio = {
-  ac: null, an: null, mediaSrc: null, micSrc: null, micStream: null, rate: 48000,
+  ac: null, an: null, monitor: null, mediaSrc: null, micSrc: null, micStream: null, rate: 48000,
   raw: new Uint8Array(FFT / 2),
   time: new Uint8Array(2048),
   bands: new Float32Array(BANDS),
@@ -51,11 +51,16 @@ const Audio = {
     this.an.smoothingTimeConstant = .58;
     this.raw = new Uint8Array(this.an.frequencyBinCount);
     this.time = new Uint8Array(this.an.fftSize);
-    // Файл: свой путь в анализатор И в колонки. Микрофон: только в анализатор
-    // (иначе обратная связь). Источник для <audio> создаётся ровно один раз.
+    // Источник для <audio> создаётся ровно один раз.
     this.mediaSrc = this.ac.createMediaElementSource(el);
     this.mediaSrc.connect(this.an);
-    this.an.connect(this.ac.destination);
+    // Анализатор -> монитор -> колонки. Монитор глушится на время работы
+    // микрофона: иначе вход возвращается в динамики и получаем свист.
+    this.monitor = this.ac.createGain();
+    this.monitor.gain.value = 1;
+    this.an.connect(this.monitor);
+    this.monitor.connect(this.ac.destination);
+    // Запись слушает анализатор напрямую, поэтому мьют монитора её не глушит.
     this.recordDest = this.ac.createMediaStreamDestination();
     this.an.connect(this.recordDest);
     this.map();
@@ -89,10 +94,12 @@ const Audio = {
     this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
     this.micSrc = this.ac.createMediaStreamSource(this.micStream);
     this.micSrc.connect(this.an);
+    if (this.monitor) this.monitor.gain.value = 0;
   },
   micOff() {
     if (this.micSrc) { this.micSrc.disconnect(); this.micSrc = null; }
     if (this.micStream) { this.micStream.getTracks().forEach(t => t.stop()); this.micStream = null; }
+    if (this.monitor) this.monitor.gain.value = 1;
   },
 
   /** Синтетический сигнал: приложение живое даже без трека. */
@@ -108,7 +115,6 @@ const Audio = {
       v += (.34 + .3 * Math.sin(t * 1.7 + p * 9 + chord)) * Math.exp(-Math.pow((p - .34) / .18, 2));
       v += (.20 + .18 * Math.sin(t * 9 + p * 40)) * Math.exp(-Math.pow((p - .78) / .22, 2));
       v += .045 * Math.sin(p * 220 + t * 3);
-      this.raw[this.lo[i]] = 0;
       this.prevRaw[i] = clamp(v, 0, 1.35);
     }
     for (let i = 0; i < this.wave.length; i++) {
@@ -235,9 +241,5 @@ const Audio = {
     return a + (b - a) * k;
   }
 };
-
-/* ------------------------------------------------------------------
-   4. СХЕМЫ ПАРАМЕТРОВ
-   ------------------------------------------------------------------ */
 
 export { Audio, ALGOS, BANDS, FFT };

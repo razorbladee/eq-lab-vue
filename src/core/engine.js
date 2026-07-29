@@ -1,11 +1,16 @@
 import { Palette, clamp } from './palette.js';
 import { Audio } from './audio.js';
 import { VIS, VMAP } from './visualizers.js';
+
+/**
+ * Рендер-цикл: один canvas, adaptive quality, состояние на визуализатор.
+ * Наружу нужны только mount() / resize() / start() / stop() и поля S, P, onErr.
+ */
 const Engine = {
   canvas: null, ctx: null, W: 0, H: 0, DPR: 1, raf: 0, last: 0,
   q: 1, ema: 16, frames: 0, fpsAcc: 0, fps: 60,
-  states: Object.create(null), sizeKey: '',
-  S: null, P: null, onErr: null,
+  states: Object.create(null),
+  S: null, P: null, onErr: null, g: null,
   bgOf: { ink: '#0d0c12', slate: '#141a1f', paper: '#f5f2ec' },
 
   mount(canvas) {
@@ -25,17 +30,20 @@ const Engine = {
 
   /** Пересчёт буфера. Пиксели ограничены, чтобы 4K-мониторы не убивали FPS. */
   resize() {
-    const c = this.canvas, r = c.getBoundingClientRect();
+    const c = this.canvas;
+    if (!c || !this.g) return;
+    const r = c.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return;
     const MAXPX = 2.6e6;
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     const px = r.width * r.height * dpr * dpr;
     if (px > MAXPX) dpr *= Math.sqrt(MAXPX / px);
     const bw = Math.max(2, Math.round(r.width * dpr)), bh = Math.max(2, Math.round(r.height * dpr));
-    if (c.width === bw && c.height === bh) return;
-    c.width = bw; c.height = bh;
+    // CSS-геометрию обновляем всегда: буфер может совпасть, а размер кадра — нет
     this.DPR = dpr; this.W = r.width; this.H = r.height;
     this.g.w = r.width; this.g.h = r.height; this.g.cx = r.width / 2; this.g.cy = r.height / 2;
+    if (c.width === bw && c.height === bh) return;
+    c.width = bw; c.height = bh;
     // Смена формата = новая геометрия: сбрасываем состояния и кэши
     this.states = Object.create(null);
     Palette.sprites.fill(null);
@@ -49,9 +57,13 @@ const Engine = {
     c.fillRect(0, 0, this.canvas.width, this.canvas.height);
   },
 
-  state(id) {
-    let s = this.states[id];
-    if (!s) s = this.states[id] = {};
+  /** Состояние сцены. Создаётся лениво, здесь же дёргаем init() визуализатора. */
+  state(vis) {
+    let s = this.states[vis.id];
+    if (!s) {
+      s = this.states[vis.id] = {};
+      if (typeof vis.init === 'function') vis.init(this.g, s);
+    }
     return s;
   },
 
@@ -64,6 +76,11 @@ const Engine = {
       this.tick(dt, now);
     };
     this.raf = requestAnimationFrame(loop);
+  },
+
+  stop() {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0; this.last = 0;
   },
 
   tick(dt, now) {
@@ -97,7 +114,7 @@ const Engine = {
 
     const vis = VMAP[S.preset] || VIS[0];
     const g = this.g;
-    g.dt = dt; g.t += dt * S.speed; g.q = this.q; g.S = S; g.p = P; g.st = this.state(vis.id);
+    g.dt = dt; g.t += dt * S.speed; g.q = this.q; g.S = S; g.p = P; g.st = this.state(vis);
 
     ctx.save();
     ctx.translate(W / 2 + (S.posX - 50) * W / 100, H / 2 + (S.posY - 50) * H / 100);
@@ -117,9 +134,5 @@ const Engine = {
     ctx.globalAlpha = 1;
   }
 };
-
-/* ------------------------------------------------------------------
-   7. VUE-ПРИЛОЖЕНИЕ
-   ------------------------------------------------------------------ */
 
 export { Engine };

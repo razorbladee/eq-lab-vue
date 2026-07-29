@@ -1,2 +1,1 @@
-# eq-lab-vue
-Vue 3 + Vite audio visualizer lab with per-visualizer parameters and WebM recording
+# EQ Lab\n\nVue 3 + Vite + Tailwind v4 audio visualizer project.\n\n## Run\n```bash\nnpm install\nnpm run dev\n```\n\nFeatures: per-visualizer state in localStorage, Canvas renderer, audio file playback, dark/light theme, responsive Tailwind layout, and WebM recording with canvas.captureStream + MediaRecorder.\n\nThe original single-file implementation is preserved in `legacy/eq222-original.html`.\n

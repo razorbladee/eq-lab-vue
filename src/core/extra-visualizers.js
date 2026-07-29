@@ -698,3 +698,151 @@ add(
     g.norm();
   },
 );
+
+add(
+  'plasmaEnergy',
+  'EXTRA // Plasma Energy',
+  {
+    strands: R('Нити', 6, 2, 16, 1),
+    nodes: R('Узлы', 3, 1, 10, 1),
+    amplitude: R('Амплитуда', 1.2, 0.1, 3),
+    speed: R('Скорость', 1, 0, 3),
+    sparks: R('Искры', 150, 0, 500, 10),
+    neon: R('Неон', 1.2, 0, 2),
+  },
+  (g) => {
+    const { ctx, w, h, cx, cy, A, p, t } = g;
+
+    if (!g.st.sparks) g.st.sparks = [];
+
+    g.add();
+
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    for (let i = 0; i <= 1; i += 0.1) grad.addColorStop(i, g.col(i));
+    ctx.strokeStyle = grad;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    const drawSmoothNeon = (neonMult) => {
+      g.alpha(0.9);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      if (neonMult > 0) {
+        g.alpha(0.35 * neonMult);
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        g.alpha(0.15 * neonMult);
+        ctx.lineWidth = 10;
+        ctx.stroke();
+
+        g.alpha(0.06 * neonMult);
+        ctx.lineWidth = 22;
+        ctx.stroke();
+
+        g.alpha(0.02 * neonMult);
+        ctx.lineWidth = 45;
+        ctx.stroke();
+      }
+    };
+
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 5) {
+      const fx = x / w;
+      const audioVal = A.b(fx);
+      const y = cy + Math.sin(fx * 80 + t * 4) * audioVal * 3;
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    drawSmoothNeon(p.neon * 0.7);
+
+    for (let i = 0; i < p.strands; i++) {
+      const fi = i / Math.max(1, p.strands - 1);
+      const phase = fi * Math.PI * 2;
+
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 5) {
+        const fx = x / w;
+        const env = Math.sin(fx * Math.PI);
+        const audioVal = 0.1 + A.b(fx) * 1.5;
+
+        const pinch = Math.cos(fx * Math.PI * p.nodes - t * p.speed * 0.4);
+        const wave = Math.sin(fx * Math.PI * 6 + phase + t * p.speed);
+
+        const yOffset = wave * pinch * env * audioVal * h * 0.35 * p.amplitude;
+
+        if (x === 0) ctx.moveTo(x, cy + yOffset);
+        else ctx.lineTo(x, cy + yOffset);
+      }
+      drawSmoothNeon(p.neon);
+    }
+
+    const centerAudio = A.b(0.5);
+    if (centerAudio > 0.25) {
+      const flareH = Math.pow(centerAudio, 2) * h * 0.6 * p.amplitude;
+      ctx.beginPath();
+      ctx.moveTo(w / 2, cy - flareH);
+      ctx.lineTo(w / 2, cy + flareH);
+      drawSmoothNeon(p.neon * 0.8);
+    }
+
+    if (A.flux > 0.15) {
+      const spawns = Math.floor(A.flux * p.sparks * g.dt * 60);
+      for (let k = 0; k < spawns; k++) {
+        const fx = Math.random();
+        if (Math.random() > A.b(fx)) continue;
+
+        const env = Math.sin(fx * Math.PI);
+        const yBase = (Math.random() - 0.5) * h * 0.4 * env;
+
+        g.st.sparks.push({
+          x: fx * w,
+          y: cy + yBase,
+          vx: (Math.random() - 0.5) * 5,
+          vy: (Math.random() - 0.5) * 5 + (yBase > 0 ? 1 : -1) * 3,
+          life: 0.5 + Math.random(),
+          maxLife: 1.5,
+        });
+      }
+    }
+
+    g.st.sparks.forEach((sp, i) => {
+      sp.x += sp.vx * g.dt * 60;
+      sp.y += sp.vy * g.dt * 60;
+      sp.life -= g.dt;
+
+      if (sp.life <= 0 || sp.x < 0 || sp.x > w || sp.y < 0 || sp.y > h) {
+        g.st.sparks.splice(i, 1);
+      } else {
+        const alpha = Math.pow(sp.life / sp.maxLife, 2) * p.neon;
+        const speed = Math.sqrt(sp.vx * sp.vx + sp.vy * sp.vy);
+        const len = speed * 2.5;
+
+        ctx.beginPath();
+        ctx.moveTo(sp.x, sp.y);
+        ctx.lineTo(sp.x - sp.vx * len, sp.y - sp.vy * len);
+
+        const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+        ctx.strokeStyle = g.col(clamp(sp.x / w, 0, 1));
+        ctx.lineCap = 'round';
+
+        g.alpha(alpha);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        if (p.neon > 0) {
+          g.alpha(alpha * 0.4);
+          ctx.lineWidth = 6;
+          ctx.stroke();
+
+          g.alpha(alpha * 0.15);
+          ctx.lineWidth = 15;
+          ctx.stroke();
+        }
+      }
+    });
+
+    g.norm();
+  },
+);

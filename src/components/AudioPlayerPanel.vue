@@ -75,7 +75,6 @@ watch([from, to], setSelection);
 </script>
 <template>
   <section class="player-panel" aria-label="Аудиоплеер">
-    <PlaybackSeekbar :duration="duration" :current="current" :from="from" :to="to" @seek="seek" />
     <div class="player-row">
       <button
         type="button"
@@ -93,13 +92,21 @@ watch([from, to], setSelection);
       </button>
 
       <div class="player-region-container">
-        <AudioRegionSelector
-          v-if="duration"
-          :src="audioSrc"
-          :duration="duration"
-          v-model:from="from"
-          v-model:to="to"
-        />
+        <template v-if="duration">
+          <PlaybackSeekbar
+            :duration="duration"
+            :current="current"
+            :from="from"
+            :to="to"
+            @seek="seek"
+          />
+          <AudioRegionSelector
+            :src="audioSrc"
+            :duration="duration"
+            v-model:from="from"
+            v-model:to="to"
+          />
+        </template>
         <div v-else class="region-placeholder">Нет загруженного трека</div>
       </div>
 

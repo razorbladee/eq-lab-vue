@@ -70,9 +70,8 @@ const draw = () => {
 
   if (peaks.value.length === 0) return;
 
-  const style = getComputedStyle(canvas.value);
-  const accent = style.getPropertyValue('--accent').trim();
-  ctx.fillStyle = accent || '#ff5a2d';
+  // Safe solid fallback color to prevent disappearing canvas bugs in some browsers
+  ctx.fillStyle = '#ff5a2d';
 
   const p = peaks.value;
   const step = w / (p.length - 1);
@@ -101,16 +100,16 @@ watch(
   async (newSrc) => {
     peaks.value = [];
     draw();
-    if (!newSrc) return;
+    if (!newSrc || !newSrc.startsWith('blob:')) return;
 
     loading.value = true;
     try {
       const res = await fetch(newSrc);
       const arrayBuffer = await res.arrayBuffer();
-      // Create an offline context matching the browser's sample rate or 44100
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      if (ctx.state !== 'closed') ctx.close();
+      if (!Audio.ac) {
+        return; // If main context not ready, fallback gracefully.
+      }
+      const audioBuffer = await Audio.ac.decodeAudioData(arrayBuffer);
       peaks.value = await extractPeaks(audioBuffer, 800);
       draw();
     } catch (err) {
@@ -186,7 +185,11 @@ const onPointerUp = () => {
 onMounted(() => {
   const ro = new ResizeObserver(() => draw());
   ro.observe(wrap.value);
-  onUnmounted(() => ro.disconnect());
+  window.addEventListener('resize', draw);
+  onUnmounted(() => {
+    ro.disconnect();
+    window.removeEventListener('resize', draw);
+  });
 });
 
 const leftPct = computed(() => (props.duration ? (props.from / props.duration) * 100 : 0));
@@ -227,8 +230,7 @@ const widthPct = computed(() =>
 .region-wrap {
   position: relative;
   width: 100%;
-  height: 48px;
-
+  height: 40px;
   background: var(--panel-2);
   border-radius: 6px;
   user-select: none;

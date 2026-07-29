@@ -6,6 +6,9 @@
 
 /** Размер таблицы цветов. Меньше ~64 — видимые ступени на градиентах. */
 const STOPS = 256;
+// Legacy scenes referenced STOPS as a browser global. Keep the compatibility
+// binding until visualizers.js is fully split into explicit ES modules.
+if (typeof globalThis !== 'undefined') globalThis.STOPS = STOPS;
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -25,12 +28,6 @@ const Palette = {
   r: new Uint8Array(STOPS), g: new Uint8Array(STOPS), b: new Uint8Array(STOPS),
   str: new Array(STOPS).fill('rgb(255,255,255)'),
   sprites: new Array(16).fill(null),
-
-  /**
-   * Пересобирает LUT. Вызывается каждый кадр, но реально работает только
-   * при смене ключа. hueOffset учитывается лишь в режиме spectrum — иначе
-   * прокрутка оттенка дёргала бы ключ каждый кадр и убивала кэш спрайтов.
-   */
   build(mode, c1, c2, hueOffset) {
     const off = mode === 'spectrum' ? (hueOffset | 0) : 0;
     const key = mode + '|' + c1 + '|' + c2 + '|' + off;
@@ -44,7 +41,6 @@ const Palette = {
       else if (mode === 'spectrum') c = hslToRgb(t * 300 + off, .92, .61);
       else if (mode === 'split') c = t < .5 ? A : B;
       else {
-        // Дуо через смешивание в квадрате яркости — меньше «грязи» в середине
         const m = t * t * (3 - 2 * t);
         c = [Math.sqrt(lerp(A[0] ** 2, B[0] ** 2, m)) | 0,
              Math.sqrt(lerp(A[1] ** 2, B[1] ** 2, m)) | 0,
@@ -55,16 +51,9 @@ const Palette = {
     }
     this.sprites.fill(null);
   },
-
-  /** Позиция 0..1 -> индекс LUT. NaN и выбросы безопасны. */
   idx(x) { return x > 0 ? (x < 1 ? (x * (STOPS - 1)) | 0 : STOPS - 1) : 0; },
   at(x) { return this.str[this.idx(x)]; },
-  rgba(x, a) {
-    const i = this.idx(x);
-    return 'rgba(' + this.r[i] + ',' + this.g[i] + ',' + this.b[i] + ',' + a + ')';
-  },
-
-  /** Спрайт свечения вместо shadowBlur: ~40x быстрее в циклах по частицам. */
+  rgba(x, a) { const i = this.idx(x); return 'rgba(' + this.r[i] + ',' + this.g[i] + ',' + this.b[i] + ',' + a + ')'; },
   sprite(x) {
     const k = clamp((x * 15) | 0, 0, 15);
     if (this.sprites[k]) return this.sprites[k];

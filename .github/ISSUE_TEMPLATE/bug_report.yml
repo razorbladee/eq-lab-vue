@@ -1,0 +1,24 @@
+name: Bug report
+description: Report a reproducible EQ Lab problem
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Include the visualizer, audio source and exact steps.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Browser and device
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Console output or recording

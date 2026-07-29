@@ -10,11 +10,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run format:check && npm run build"
+    "smoke": "node scripts/smoke-visualizers.mjs",
+    "check": "npm run lint && npm run format:check && npm run smoke && npm run build"
   },
-  "dependencies": {
-    "vue": "^3.5.0"
-  },
+  "dependencies": { "vue": "^3.5.0" },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@tailwindcss/vite": "^4.1.0",

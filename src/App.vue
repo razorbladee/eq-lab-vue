@@ -17,36 +17,443 @@ import InspectorPanel from './components/InspectorPanel.vue';
 import EffectsPanel from './components/EffectsPanel.vue';
 import RecorderPanel from './components/RecorderPanel.vue';
 
-const GSCHEMA={amp:{label:'Амплитуда',min:.3,max:2.5,step:.05},speed:{label:'Скорость',min:.1,max:3,step:.05},smooth:{label:'Сглаживание FFT',min:0,max:.95,step:.01},trail:{label:'Шлейф',min:0,max:.97,step:.01},zoomW:{label:'Ширина EQ',min:.4,max:1.6,step:.01},zoomH:{label:'Высота EQ',min:.4,max:1.6,step:.01},posX:{label:'Позиция EQ X',min:0,max:100,step:1},posY:{label:'Позиция EQ Y',min:0,max:100,step:1}};
-const MUSIC={edm:{bands:[1.75,1.15,.85,1.05,1.4],smooth:.5,amp:1.35,speed:1.35,algo:'bassPunch',trail:.5},ambient:{bands:[.7,.9,1.2,1.1,1],smooth:.88,amp:.9,speed:.55,algo:'cinematic',trail:.82},rock:{bands:[1.35,1.25,1.45,1.15,1.05],smooth:.66,amp:1.15,speed:1.1,algo:'attack',trail:.4},hiphop:{bands:[1.9,1.3,.9,.85,1.1],smooth:.58,amp:1.25,speed:.95,algo:'beatPulse',trail:.55},classical:{bands:[.8,1,1.2,1.3,1.35],smooth:.82,amp:1,speed:.7,algo:'balanced',trail:.7},podcast:{bands:[.5,1.35,1.8,1.05,.6],smooth:.9,amp:.8,speed:.45,algo:'midFocus',trail:.35}};
-const DEFAULTS={preset:'bars',algo:'balanced',music:'custom',colorMode:'duo',c1:'#ff5a2d',c2:'#3ea8ff',cycle:0,canvasBg:'ink',format:'16:9',amp:1,speed:1,smooth:.58,trail:.35,zoomW:1,zoomH:1,posX:50,posY:50,gBass:1,gLowMid:1,gMid:1,gHighMid:1,gTreble:1,agc:true,demo:true,autoQuality:true};
-const GROUPS=[{id:'waves',name:'Волны'},{id:'spectrum',name:'Спектр'},{id:'radial',name:'Формы'},{id:'particles',name:'Частицы'},{id:'futuristic',name:'Футуризм'},{id:'neon',name:'Неон · новое'},{id:'reference-new',name:'Референсы · новое'},{id:'spectrum-lab',name:'Spectrum Lab · новое'},{id:'beyond-spectrum',name:'Beyond Spectrum · новое'}];
-const GROUP_SHORT=Object.fromEntries(GROUPS.map(item=>[item.id,item.name]));
-const restored=loadState(DEFAULTS,VIS),g=reactive(restored.g),params=reactive(restored.params),dark=ref(restored.dark ?? document.documentElement.classList.contains('dark'));
-const playing=ref(false),mic=ref(false),hasFile=ref(false),dragging=ref(false),fileName=ref(''),fps=ref(60),res=ref('--'),qualityPct=ref(100),bpm=ref('--'),railOpen=ref(false),inspOpen=ref(false),error=ref(null),audioEl=ref(null),canvasEl=ref(null),frameEl=ref(null),meters=reactive([]);
-let audioUrl='',statusTimer=0,meterRaf=0,resizeObserver=null;
-document.documentElement.classList.toggle('dark',dark.value);
-const controller=useAppController({visualizers:VIS,visualizerMap:VMAP,state:g,params});
-const {query,group,filtered,current,currentParams,setParam,resetParams,randomParams,cycle,random}=controller;
-const paramKeys=computed(()=>Object.keys(current.value.params));
-const algoList=Object.keys(ALGOS).map(id=>({id,name:ALGOS[id].name})),algoHint=computed(()=> (ALGOS[g.algo]||ALGOS.balanced).hint),bandKeys=[{k:'gBass',short:'Bass'},{k:'gLowMid',short:'Low'},{k:'gMid',short:'Mid'},{k:'gHighMid',short:'High'},{k:'gTreble',short:'Trbl'}],reactKeys=['amp','speed','smooth','trail'],frameKeys=['zoomW','zoomH','posX','posY'],formats=['16:9','9:16','1:1','4:5','4:3','21:9','2:1'];
-const frameStyle=computed(()=>{const[a,b]=g.format.split(':').map(Number);return{'--ar':a+'/'+b,'--arn':a/b};}),sourceLabel=computed(()=>mic.value?'Микрофон · live':fileName.value||(g.demo?'Демо-сигнал':'Источник не выбран')),fmt=v=>typeof v==='number'?(Number.isInteger(v)?v:v.toFixed(2).replace(/0$/,'')):v;
-const syncEngine=()=>{Engine.S={...g,playing:playing.value};Engine.P={...(params[g.preset]||{})};Engine.states=Object.create(null);};
-const recorder=useRecorder(canvasEl,()=>({stream:Audio.recordDest?.stream||null,audio:audioEl.value}));
-const applyMusic=()=>{const m=MUSIC[g.music];if(!m)return;[g.gBass,g.gLowMid,g.gMid,g.gHighMid,g.gTreble]=m.bands;g.smooth=m.smooth;g.amp=m.amp;g.speed=m.speed;g.algo=m.algo;g.trail=m.trail;};
-const loadFile=f=>{if(!f)return;if(f.type&&!f.type.startsWith('audio/')){error.value={id:'source',msg:'Выберите поддерживаемый аудиофайл'};return;}Audio.ensure(audioEl.value);revoke(audioUrl);audioUrl=URL.createObjectURL(f);audioEl.value.src=audioUrl;fileName.value=f.name;hasFile.value=true;g.demo=false;mic.value=false;Audio.micOff();audioEl.value.play().catch(()=>{error.value={id:'source',msg:'Браузер не смог воспроизвести этот формат'};});};
-const togglePlay=async()=>{if(!audioEl.value?.src)return;Audio.ensure(audioEl.value);await Audio.ac.resume();if(audioEl.value.paused){await audioEl.value.play().catch(()=>{});}else audioEl.value.pause();};
-const toggleMicrophone=async()=>{Audio.ensure(audioEl.value);await Audio.ac.resume();if(mic.value){Audio.micOff();mic.value=false;return;}try{audioEl.value.pause();await Audio.micOn();mic.value=true;g.demo=false;error.value=null;}catch(reason){error.value={id:'microphone',msg:reason?.message||'Нет доступа к микрофону'};}};
-const snapshot=()=>{if(!Engine.canvas)return;Engine.canvas.toBlob(blob=>{if(!blob)return;const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='eqlab-'+g.preset+'.png';link.click();setTimeout(()=>revoke(url),0);},'image/png');};
-const toggleFull=()=>document.fullscreenElement?document.exitFullscreen():frameEl.value?.requestFullscreen?.();
-const resetFrame=()=>{g.zoomW=g.zoomH=1;g.posX=g.posY=50;};
-const toggleTheme=()=>{dark.value=!dark.value;document.documentElement.classList.toggle('dark',dark.value);saveState(g,params,dark.value);};
-const onStageReady=refs=>{canvasEl.value=refs.canvas.value;frameEl.value=refs.frame.value;Engine.mount(canvasEl.value);Engine.onErr=(id,msg)=>{error.value={id,msg};};Engine.resize();syncEngine();Engine.start();};
-const onAudioReady=source=>{audioEl.value=source.value;Audio.ensure(audioEl.value);};
-const onPlayState=value=>{playing.value=value;syncEngine();};
-const onDrop=e=>{dragging.value=false;loadFile(e.dataTransfer.files[0]);};
-watch(g,()=>{syncEngine();saveState(g,params,dark.value);},{deep:true});watch(params,()=>{syncEngine();saveState(g,params,dark.value);},{deep:true});watch(playing,()=>syncEngine());watch(()=>g.preset,()=>syncEngine());
-onMounted(()=>{statusTimer=setInterval(()=>{fps.value=Engine.fps;res.value=Engine.canvas?Engine.canvas.width+'×'+Engine.canvas.height:'--';qualityPct.value=Math.round(Engine.q*100);bpm.value=Audio.bpm||'--';},500);const paint=()=>{for(let i=0;i<5;i++)if(meters[i])meters[i].style.transform='scaleX('+clamp(Audio[bandKeys[i].k],0,1)+')';meterRaf=requestAnimationFrame(paint);};meterRaf=requestAnimationFrame(paint);nextTick(()=>{if(frameEl.value){resizeObserver=new ResizeObserver(()=>Engine.resize());resizeObserver.observe(frameEl.value);}});});
-onUnmounted(()=>{recorder.cancel();clearInterval(statusTimer);cancelAnimationFrame(meterRaf);resizeObserver?.disconnect();Engine.stop();Engine.onErr=null;revoke(audioUrl);audioUrl='';void disposeEffects();void disposeAudio(audioEl.value);});
+const GSCHEMA = {
+  amp: { label: 'Амплитуда', min: 0.3, max: 2.5, step: 0.05 },
+  speed: { label: 'Скорость', min: 0.1, max: 3, step: 0.05 },
+  smooth: { label: 'Сглаживание FFT', min: 0, max: 0.95, step: 0.01 },
+  trail: { label: 'Шлейф', min: 0, max: 0.97, step: 0.01 },
+  zoomW: { label: 'Ширина EQ', min: 0.4, max: 1.6, step: 0.01 },
+  zoomH: { label: 'Высота EQ', min: 0.4, max: 1.6, step: 0.01 },
+  posX: { label: 'Позиция EQ X', min: 0, max: 100, step: 1 },
+  posY: { label: 'Позиция EQ Y', min: 0, max: 100, step: 1 },
+};
+const MUSIC = {
+  edm: {
+    bands: [1.75, 1.15, 0.85, 1.05, 1.4],
+    smooth: 0.5,
+    amp: 1.35,
+    speed: 1.35,
+    algo: 'bassPunch',
+    trail: 0.5,
+  },
+  ambient: {
+    bands: [0.7, 0.9, 1.2, 1.1, 1],
+    smooth: 0.88,
+    amp: 0.9,
+    speed: 0.55,
+    algo: 'cinematic',
+    trail: 0.82,
+  },
+  rock: {
+    bands: [1.35, 1.25, 1.45, 1.15, 1.05],
+    smooth: 0.66,
+    amp: 1.15,
+    speed: 1.1,
+    algo: 'attack',
+    trail: 0.4,
+  },
+  hiphop: {
+    bands: [1.9, 1.3, 0.9, 0.85, 1.1],
+    smooth: 0.58,
+    amp: 1.25,
+    speed: 0.95,
+    algo: 'beatPulse',
+    trail: 0.55,
+  },
+  classical: {
+    bands: [0.8, 1, 1.2, 1.3, 1.35],
+    smooth: 0.82,
+    amp: 1,
+    speed: 0.7,
+    algo: 'balanced',
+    trail: 0.7,
+  },
+  podcast: {
+    bands: [0.5, 1.35, 1.8, 1.05, 0.6],
+    smooth: 0.9,
+    amp: 0.8,
+    speed: 0.45,
+    algo: 'midFocus',
+    trail: 0.35,
+  },
+};
+const DEFAULTS = {
+  preset: 'bars',
+  algo: 'balanced',
+  music: 'custom',
+  colorMode: 'duo',
+  c1: '#ff5a2d',
+  c2: '#3ea8ff',
+  cycle: 0,
+  canvasBg: 'ink',
+  format: '16:9',
+  amp: 1,
+  speed: 1,
+  smooth: 0.58,
+  trail: 0.35,
+  zoomW: 1,
+  zoomH: 1,
+  posX: 50,
+  posY: 50,
+  gBass: 1,
+  gLowMid: 1,
+  gMid: 1,
+  gHighMid: 1,
+  gTreble: 1,
+  agc: true,
+  demo: true,
+  autoQuality: true,
+};
+const GROUPS = [
+  { id: 'waves', name: 'Волны' },
+  { id: 'spectrum', name: 'Спектр' },
+  { id: 'radial', name: 'Формы' },
+  { id: 'particles', name: 'Частицы' },
+  { id: 'futuristic', name: 'Футуризм' },
+  { id: 'neon', name: 'Неон · новое' },
+  { id: 'reference-new', name: 'Референсы · новое' },
+  { id: 'spectrum-lab', name: 'Spectrum Lab · новое' },
+  { id: 'beyond-spectrum', name: 'Beyond Spectrum · новое' },
+  { id: 'extra', name: 'Экстра · новые идеи' },
+];
+const GROUP_SHORT = Object.fromEntries(GROUPS.map((item) => [item.id, item.name]));
+const restored = loadState(DEFAULTS, VIS),
+  g = reactive(restored.g),
+  params = reactive(restored.params),
+  dark = ref(restored.dark ?? document.documentElement.classList.contains('dark'));
+const playing = ref(false),
+  mic = ref(false),
+  hasFile = ref(false),
+  dragging = ref(false),
+  fileName = ref(''),
+  fps = ref(60),
+  res = ref('--'),
+  qualityPct = ref(100),
+  bpm = ref('--'),
+  railOpen = ref(false),
+  inspOpen = ref(false),
+  error = ref(null),
+  audioEl = ref(null),
+  canvasEl = ref(null),
+  frameEl = ref(null),
+  meters = reactive([]);
+let audioUrl = '',
+  statusTimer = 0,
+  meterRaf = 0,
+  resizeObserver = null;
+document.documentElement.classList.toggle('dark', dark.value);
+const controller = useAppController({ visualizers: VIS, visualizerMap: VMAP, state: g, params });
+const {
+  query,
+  group,
+  filtered,
+  current,
+  currentParams,
+  setParam,
+  resetParams,
+  randomParams,
+  cycle,
+  random,
+} = controller;
+const paramKeys = computed(() => Object.keys(current.value.params));
+const algoList = Object.keys(ALGOS).map((id) => ({ id, name: ALGOS[id].name })),
+  algoHint = computed(() => (ALGOS[g.algo] || ALGOS.balanced).hint),
+  bandKeys = [
+    { k: 'gBass', short: 'Bass' },
+    { k: 'gLowMid', short: 'Low' },
+    { k: 'gMid', short: 'Mid' },
+    { k: 'gHighMid', short: 'High' },
+    { k: 'gTreble', short: 'Trbl' },
+  ],
+  reactKeys = ['amp', 'speed', 'smooth', 'trail'],
+  frameKeys = ['zoomW', 'zoomH', 'posX', 'posY'],
+  formats = ['16:9', '9:16', '1:1', '4:5', '4:3', '21:9', '2:1'];
+const frameStyle = computed(() => {
+    const [a, b] = g.format.split(':').map(Number);
+    return { '--ar': a + '/' + b, '--arn': a / b };
+  }),
+  sourceLabel = computed(() =>
+    mic.value
+      ? 'Микрофон · live'
+      : fileName.value || (g.demo ? 'Демо-сигнал' : 'Источник не выбран'),
+  ),
+  fmt = (v) =>
+    typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2).replace(/0$/, '')) : v;
+const syncEngine = () => {
+  Engine.S = { ...g, playing: playing.value };
+  Engine.P = { ...(params[g.preset] || {}) };
+  Engine.states = Object.create(null);
+};
+const recorder = useRecorder(canvasEl, () => ({
+  stream: Audio.recordDest?.stream || null,
+  audio: audioEl.value,
+}));
+const applyMusic = () => {
+  const m = MUSIC[g.music];
+  if (!m) return;
+  [g.gBass, g.gLowMid, g.gMid, g.gHighMid, g.gTreble] = m.bands;
+  g.smooth = m.smooth;
+  g.amp = m.amp;
+  g.speed = m.speed;
+  g.algo = m.algo;
+  g.trail = m.trail;
+};
+const loadFile = (f) => {
+  if (!f) return;
+  if (f.type && !f.type.startsWith('audio/')) {
+    error.value = { id: 'source', msg: 'Выберите поддерживаемый аудиофайл' };
+    return;
+  }
+  Audio.ensure(audioEl.value);
+  revoke(audioUrl);
+  audioUrl = URL.createObjectURL(f);
+  audioEl.value.src = audioUrl;
+  fileName.value = f.name;
+  hasFile.value = true;
+  g.demo = false;
+  mic.value = false;
+  Audio.micOff();
+  audioEl.value.play().catch(() => {
+    error.value = { id: 'source', msg: 'Браузер не смог воспроизвести этот формат' };
+  });
+};
+const togglePlay = async () => {
+  if (!audioEl.value?.src) return;
+  Audio.ensure(audioEl.value);
+  await Audio.ac.resume();
+  if (audioEl.value.paused) {
+    await audioEl.value.play().catch(() => {});
+  } else audioEl.value.pause();
+};
+const toggleMicrophone = async () => {
+  Audio.ensure(audioEl.value);
+  await Audio.ac.resume();
+  if (mic.value) {
+    Audio.micOff();
+    mic.value = false;
+    return;
+  }
+  try {
+    audioEl.value.pause();
+    await Audio.micOn();
+    mic.value = true;
+    g.demo = false;
+    error.value = null;
+  } catch (reason) {
+    error.value = { id: 'microphone', msg: reason?.message || 'Нет доступа к микрофону' };
+  }
+};
+const snapshot = () => {
+  if (!Engine.canvas) return;
+  Engine.canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob),
+      link = document.createElement('a');
+    link.href = url;
+    link.download = 'eqlab-' + g.preset + '.png';
+    link.click();
+    setTimeout(() => revoke(url), 0);
+  }, 'image/png');
+};
+const toggleFull = () =>
+  document.fullscreenElement ? document.exitFullscreen() : frameEl.value?.requestFullscreen?.();
+const resetFrame = () => {
+  g.zoomW = g.zoomH = 1;
+  g.posX = g.posY = 50;
+};
+const toggleTheme = () => {
+  dark.value = !dark.value;
+  document.documentElement.classList.toggle('dark', dark.value);
+  saveState(g, params, dark.value);
+};
+const onStageReady = (refs) => {
+  canvasEl.value = refs.canvas.value;
+  frameEl.value = refs.frame.value;
+  Engine.mount(canvasEl.value);
+  Engine.onErr = (id, msg) => {
+    error.value = { id, msg };
+  };
+  Engine.resize();
+  syncEngine();
+  Engine.start();
+};
+const onAudioReady = (source) => {
+  audioEl.value = source.value;
+  Audio.ensure(audioEl.value);
+};
+const onPlayState = (value) => {
+  playing.value = value;
+  syncEngine();
+};
+const onDrop = (e) => {
+  dragging.value = false;
+  loadFile(e.dataTransfer.files[0]);
+};
+watch(
+  g,
+  () => {
+    syncEngine();
+    saveState(g, params, dark.value);
+  },
+  { deep: true },
+);
+watch(
+  params,
+  () => {
+    syncEngine();
+    saveState(g, params, dark.value);
+  },
+  { deep: true },
+);
+watch(playing, () => syncEngine());
+watch(
+  () => g.preset,
+  () => syncEngine(),
+);
+onMounted(() => {
+  statusTimer = setInterval(() => {
+    fps.value = Engine.fps;
+    res.value = Engine.canvas ? Engine.canvas.width + '×' + Engine.canvas.height : '--';
+    qualityPct.value = Math.round(Engine.q * 100);
+    bpm.value = Audio.bpm || '--';
+  }, 500);
+  const paint = () => {
+    for (let i = 0; i < 5; i++)
+      if (meters[i])
+        meters[i].style.transform = 'scaleX(' + clamp(Audio[bandKeys[i].k], 0, 1) + ')';
+    meterRaf = requestAnimationFrame(paint);
+  };
+  meterRaf = requestAnimationFrame(paint);
+  nextTick(() => {
+    if (frameEl.value) {
+      resizeObserver = new ResizeObserver(() => Engine.resize());
+      resizeObserver.observe(frameEl.value);
+    }
+  });
+});
+onUnmounted(() => {
+  recorder.cancel();
+  clearInterval(statusTimer);
+  cancelAnimationFrame(meterRaf);
+  resizeObserver?.disconnect();
+  Engine.stop();
+  Engine.onErr = null;
+  revoke(audioUrl);
+  audioUrl = '';
+  void disposeEffects();
+  void disposeAudio(audioEl.value);
+});
 </script>
-<template><div id="app" v-cloak class="shell"><header class="flex items-center gap-3 px-4 py-2.5 border-b" style="border-color:var(--line);background:var(--panel)"><button class="btn xl:hidden" @click="railOpen=!railOpen">☰</button><div class="flex items-baseline gap-2.5 min-w-0"><span class="mono font-bold text-[13px] tracking-[0.2em]">EQ&nbsp;LAB</span><span class="mono text-[10px] tracking-[0.14em] uppercase truncate" style="color:var(--ink-3)">{{sourceLabel}}</span></div><div class="ml-auto flex items-center gap-2"><span class="hidden sm:inline mono text-[10px] nums" style="color:var(--ink-3)">{{fps}} FPS / {{res}} / Q{{qualityPct}}</span><select v-model="g.format" style="width:auto;min-width:88px" class="mono text-[12px]"><option v-for="format in formats" :key="format">{{format}}</option></select><button class="btn" @click="snapshot">PNG</button><button class="btn" @click="toggleFull">⛶</button><button class="btn" @click="toggleTheme">{{dark?'☀':'☾'}}</button><button class="btn xl:hidden" @click="inspOpen=!inspOpen">⚙</button></div></header><div class="body-row"><aside class="rail" :class="{open:railOpen}"><SourcePanel :playing="playing" :microphone="mic" :has-file="hasFile" :demo="g.demo" :load-file="loadFile" :toggle-microphone="toggleMicrophone" @update:demo="g.demo=$event" /><VisualizerBrowser :items="filtered" :selected="g.preset" :query="query" :group="group" :groups="GROUPS" :labels="GROUP_SHORT" :cycle="cycle" :random="random" @update:selected="g.preset=$event" @update:query="query=$event" @update:group="group=$event" /><ReactionPanel :state="g" :algorithms="algoList" :hint="algoHint" :music="MUSIC" :schema="GSCHEMA" :keys="reactKeys" :apply-music="applyMusic" /><EffectsPanel /></aside><StageView :frame-style="frameStyle" :dragging="dragging" :meters="meters" :bands="bandKeys" :bpm="bpm" :error="error" @ready="onStageReady" @dragover="dragging=true" @dragleave="dragging=false" @drop="onDrop" /><AudioPlayerPanel :playing="playing" :has-file="hasFile" :file-name="fileName" @ready="onAudioReady" @toggle="togglePlay" @play-state="onPlayState" /><InspectorPanel :current="current" :params="currentParams" :state="g" :schema="GSCHEMA" :frame-keys="frameKeys" :param-keys="paramKeys" :group-short="GROUP_SHORT" :formats="formats" :dark="dark" :reset-params="resetParams" :random-params="randomParams" :reset-frame="resetFrame" :set-param="setParam" :fmt="fmt" :snapshot="snapshot" :toggle-full="toggleFull" :toggle-theme="toggleTheme"><RecorderPanel :recording="recorder.recording" :countdown="recorder.countdown" :error="recorder.error" :start="recorder.start" :stop="recorder.stop" :cancel="recorder.cancel" /></InspectorPanel><div class="scrim xl:hidden" v-if="railOpen||inspOpen" @click="railOpen=false;inspOpen=false"></div></div></div></template>
+<template>
+  <div id="app" v-cloak class="shell">
+    <header
+      class="flex items-center gap-3 px-4 py-2.5 border-b"
+      style="border-color: var(--line); background: var(--panel)"
+    >
+      <button class="btn xl:hidden" @click="railOpen = !railOpen">☰</button>
+      <div class="flex items-baseline gap-2.5 min-w-0">
+        <span class="mono font-bold text-[13px] tracking-[0.2em]">EQ&nbsp;LAB</span
+        ><span
+          class="mono text-[10px] tracking-[0.14em] uppercase truncate"
+          style="color: var(--ink-3)"
+          >{{ sourceLabel }}</span
+        >
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <span class="hidden sm:inline mono text-[10px] nums" style="color: var(--ink-3)"
+          >{{ fps }} FPS / {{ res }} / Q{{ qualityPct }}</span
+        ><select v-model="g.format" style="width: auto; min-width: 88px" class="mono text-[12px]">
+          <option v-for="format in formats" :key="format">{{ format }}</option></select
+        ><button class="btn" @click="snapshot">PNG</button
+        ><button class="btn" @click="toggleFull">⛶</button
+        ><button class="btn" @click="toggleTheme">{{ dark ? '☀' : '☾' }}</button
+        ><button class="btn xl:hidden" @click="inspOpen = !inspOpen">⚙</button>
+      </div>
+    </header>
+    <div class="body-row">
+      <aside class="rail" :class="{ open: railOpen }">
+        <SourcePanel
+          :playing="playing"
+          :microphone="mic"
+          :has-file="hasFile"
+          :demo="g.demo"
+          :load-file="loadFile"
+          :toggle-microphone="toggleMicrophone"
+          @update:demo="g.demo = $event"
+        /><VisualizerBrowser
+          :items="filtered"
+          :selected="g.preset"
+          :query="query"
+          :group="group"
+          :groups="GROUPS"
+          :labels="GROUP_SHORT"
+          :cycle="cycle"
+          :random="random"
+          @update:selected="g.preset = $event"
+          @update:query="query = $event"
+          @update:group="group = $event"
+        /><ReactionPanel
+          :state="g"
+          :algorithms="algoList"
+          :hint="algoHint"
+          :music="MUSIC"
+          :schema="GSCHEMA"
+          :keys="reactKeys"
+          :apply-music="applyMusic"
+        /><EffectsPanel />
+      </aside>
+      <StageView
+        :frame-style="frameStyle"
+        :dragging="dragging"
+        :meters="meters"
+        :bands="bandKeys"
+        :bpm="bpm"
+        :error="error"
+        @ready="onStageReady"
+        @dragover="dragging = true"
+        @dragleave="dragging = false"
+        @drop="onDrop"
+      /><AudioPlayerPanel
+        :playing="playing"
+        :has-file="hasFile"
+        :file-name="fileName"
+        @ready="onAudioReady"
+        @toggle="togglePlay"
+        @play-state="onPlayState"
+      /><InspectorPanel
+        :current="current"
+        :params="currentParams"
+        :state="g"
+        :schema="GSCHEMA"
+        :frame-keys="frameKeys"
+        :param-keys="paramKeys"
+        :group-short="GROUP_SHORT"
+        :formats="formats"
+        :dark="dark"
+        :reset-params="resetParams"
+        :random-params="randomParams"
+        :reset-frame="resetFrame"
+        :set-param="setParam"
+        :fmt="fmt"
+        :snapshot="snapshot"
+        :toggle-full="toggleFull"
+        :toggle-theme="toggleTheme"
+        ><RecorderPanel
+          :recording="recorder.recording"
+          :countdown="recorder.countdown"
+          :error="recorder.error"
+          :start="recorder.start"
+          :stop="recorder.stop"
+          :cancel="recorder.cancel"
+      /></InspectorPanel>
+      <div
+        class="scrim xl:hidden"
+        v-if="railOpen || inspOpen"
+        @click="
+          railOpen = false;
+          inspOpen = false;
+        "
+      ></div>
+    </div>
+  </div>
+</template>

@@ -12,7 +12,7 @@ defineEmits(['update:demo']);
 </script>
 <template>
   <PanelFrame title="Источник"
-    ><div class="grid grid-cols-2 gap-2">
+    ><div class="grid grid-cols-1 gap-2">
       <label class="btn"
         >Файл<input
           type="file"
@@ -21,10 +21,8 @@ defineEmits(['update:demo']);
           @change="
             loadFile($event.target.files[0]);
             $event.target.value = '';
-          " /></label
-      ><button class="btn" :class="{ 'btn-live': microphone }" @click="toggleMicrophone()">
-        {{ microphone ? 'Стоп мик' : 'Микрофон' }}
-      </button>
+          "
+      /></label>
     </div>
     <label class="flex items-center justify-between gap-3 text-[12.5px]"
       >Демо-сигнал без звука<span

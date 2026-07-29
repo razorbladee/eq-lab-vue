@@ -74,34 +74,35 @@ watch([from, to], setSelection);
 </script>
 <template>
   <section class="player-panel" aria-label="Аудиоплеер">
-    <div class="player-top">
+    <div class="player-row">
       <button
         type="button"
-        class="btn btn-primary player-toggle"
+        class="btn btn-primary player-toggle-icon"
         :disabled="!hasFile"
         @click="emit('toggle')"
+        :title="playing ? 'Пауза' : 'Играть'"
       >
-        {{ playing ? 'Пауза' : 'Играть' }}</button
-      ><span class="player-name" :title="fileName">{{ fileName || 'Источник не выбран' }}</span
-      ><span class="player-time mono">{{ fmt(current) }} / {{ fmt(duration) }}</span>
+        <svg v-if="playing" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </button>
+
+      <div class="player-region-container">
+        <AudioRegionSelector
+          v-if="duration"
+          :src="audioSrc"
+          :duration="duration"
+          v-model:from="from"
+          v-model:to="to"
+        />
+        <div v-else class="region-placeholder">Нет загруженного трека</div>
+      </div>
+
+      <span class="player-time mono">{{ fmt(current) }} / {{ fmt(duration) }}</span>
     </div>
-    <input
-      class="player-seek"
-      type="range"
-      min="0"
-      :max="duration || 1"
-      step=".01"
-      :value="current"
-      :disabled="!duration"
-      @input="seek"
-    />
-    <AudioRegionSelector
-      v-if="duration"
-      :src="audioSrc"
-      :duration="duration"
-      v-model:from="from"
-      v-model:to="to"
-    />
     <audio ref="audio" preload="metadata"></audio>
   </section>
 </template>

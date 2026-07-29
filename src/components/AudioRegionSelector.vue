@@ -228,7 +228,7 @@ const widthPct = computed(() =>
   position: relative;
   width: 100%;
   height: 48px;
-  margin-top: 24px;
+
   background: var(--panel-2);
   border-radius: 6px;
   user-select: none;

@@ -1,14 +1,16 @@
-import { onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 
 const MIME_TYPES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
 
 export function useRecorder(canvas, audioStream) {
-  const recording = ref(false);
-  const countdown = ref(0);
+  const status = ref('idle');
   const error = ref('');
   let recorder = null;
   let canvasStream = null;
   let cancelled = false;
+
+  const recording = ref(false);
+  const countdown = ref(0);
 
   const cleanupTracks = () => {
     canvasStream?.getTracks().forEach(track => track.stop());
@@ -18,6 +20,7 @@ export function useRecorder(canvas, audioStream) {
   const reset = () => {
     countdown.value = 0;
     recording.value = false;
+    status.value = 'idle';
     recorder = null;
     cleanupTracks();
   };
@@ -35,51 +38,53 @@ export function useRecorder(canvas, audioStream) {
     cancelled = true;
     const active = recorder;
     if (active && active.state !== 'inactive') {
-      active.stop();
+      try { active.stop(); } catch { reset(); }
       return;
     }
     reset();
   };
 
   const start = (fps = 60) => {
-    // This function is only called by the explicit Record button.
-    if (recording.value || countdown.value) return;
+    if (status.value !== 'idle') return;
     error.value = '';
-    if (!canvas.value?.captureStream || !window.MediaRecorder) {
+    const target = canvas.value;
+    if (!target?.captureStream || typeof window.MediaRecorder !== 'function') {
       error.value = 'Запись не поддерживается этим браузером';
       return;
     }
     cancelled = false;
-    const videoStream = canvas.value.captureStream(fps);
-    canvasStream = videoStream;
-    const tracks = [...videoStream.getVideoTracks()];
-    const source = audioStream?.();
-    if (source) tracks.push(...source.getAudioTracks());
-    const stream = new MediaStream(tracks);
-    const mimeType = MIME_TYPES.find(type => MediaRecorder.isTypeSupported(type));
-    if (!mimeType) {
-      error.value = 'WebM-кодек недоступен';
-      reset();
-      return;
-    }
-    const chunks = [];
     try {
-      recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
-      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
-      recorder.onerror = () => { error.value = 'Запись остановилась из-за ошибки'; reset(); };
-      recorder.onstop = () => {
+      const videoStream = target.captureStream(fps);
+      canvasStream = videoStream;
+      const tracks = [...videoStream.getVideoTracks()];
+      const source = audioStream?.();
+      if (source) tracks.push(...source.getAudioTracks());
+      const stream = new MediaStream(tracks);
+      const mimeType = MIME_TYPES.find(type => window.MediaRecorder.isTypeSupported(type));
+      if (!mimeType) throw new Error('WebM-кодек недоступен');
+      const chunks = [];
+      const instance = new window.MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      recorder = instance;
+      status.value = 'recording';
+      recording.value = true;
+      instance.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      instance.onerror = () => {
+        error.value = 'Запись остановилась из-за ошибки';
+        reset();
+      };
+      instance.onstop = () => {
         const shouldDownload = !cancelled && chunks.length > 0;
         reset();
         if (shouldDownload) download(new Blob(chunks, { type: mimeType }));
       };
-      recorder.start(250);
-      recording.value = true;
+      instance.start(250);
     } catch (reason) {
       error.value = reason?.message || 'Не удалось запустить запись';
       reset();
     }
   };
 
+  onMounted(reset);
   onUnmounted(cancel);
-  return { recording, countdown, error, start, cancel };
+  return { status, recording, countdown, error, start, cancel, reset };
 }

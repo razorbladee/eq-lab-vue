@@ -8,10 +8,10 @@ defineProps({ recording: Boolean, countdown: Number, error: String, start: Funct
       <p v-if="recording" class="rec-status rec-live">Идёт запись</p>
       <p v-if="error" class="rec-error">{{ error }}</p>
       <div class="grid grid-cols-2 gap-2">
-        <button type="button" class="btn btn-primary" :disabled="recording" @click.stop="start()">{{ recording ? 'Идёт запись' : 'Запись' }}</button>
-        <button type="button" class="btn" :disabled="!recording" @click.stop="cancel">Остановить</button>
+        <button type="button" class="btn btn-primary" :disabled="recording" @click.prevent.stop="start()">{{ recording ? 'Идёт запись' : 'Запись' }}</button>
+        <button type="button" class="btn" :disabled="!recording" @click.prevent.stop="cancel">Остановить</button>
       </div>
-      <small class="rec-note">Запись начинается сразу по нажатию. Останови её, чтобы скачать WebM.</small>
+      <small class="rec-note">Запись начинается только после нажатия. Останови её, чтобы скачать WebM.</small>
     </div>
   </details>
 </template>

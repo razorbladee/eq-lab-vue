@@ -4,7 +4,6 @@ import { VIS, VMAP } from './core/visualizers';
 import { Audio, ALGOS } from './core/audio';
 import { Engine } from './core/engine';
 import { clamp } from './core/palette';
-import { loadState, saveState } from './core/persistence';
 import { revoke, disposeAudio, disposeEffects } from './core/lifecycle';
 import { useAppController } from './composables/useAppController';
 import { useRecorder } from './composables/useRecorder';
@@ -16,113 +15,12 @@ import AudioPlayerPanel from './components/AudioPlayerPanel.vue';
 import InspectorPanel from './components/InspectorPanel.vue';
 import EffectsPanel from './components/EffectsPanel.vue';
 import RecorderPanel from './components/RecorderPanel.vue';
+import { GSCHEMA, MUSIC, GROUPS, GROUP_SHORT } from './core/constants.js';
+import { useStore } from './composables/useStore.js';
 
-const GSCHEMA = {
-  amp: { label: 'Амплитуда', min: 0.3, max: 2.5, step: 0.05 },
-  speed: { label: 'Скорость', min: 0.1, max: 3, step: 0.05 },
-  smooth: { label: 'Сглаживание FFT', min: 0, max: 0.95, step: 0.01 },
-  trail: { label: 'Шлейф', min: 0, max: 0.97, step: 0.01 },
-  zoomW: { label: 'Ширина EQ', min: 0.4, max: 1.6, step: 0.01 },
-  zoomH: { label: 'Высота EQ', min: 0.4, max: 1.6, step: 0.01 },
-  posX: { label: 'Позиция EQ X', min: 0, max: 100, step: 1 },
-  posY: { label: 'Позиция EQ Y', min: 0, max: 100, step: 1 },
-};
-const MUSIC = {
-  edm: {
-    bands: [1.75, 1.15, 0.85, 1.05, 1.4],
-    smooth: 0.5,
-    amp: 1.35,
-    speed: 1.35,
-    algo: 'bassPunch',
-    trail: 0.5,
-  },
-  ambient: {
-    bands: [0.7, 0.9, 1.2, 1.1, 1],
-    smooth: 0.88,
-    amp: 0.9,
-    speed: 0.55,
-    algo: 'cinematic',
-    trail: 0.82,
-  },
-  rock: {
-    bands: [1.35, 1.25, 1.45, 1.15, 1.05],
-    smooth: 0.66,
-    amp: 1.15,
-    speed: 1.1,
-    algo: 'attack',
-    trail: 0.4,
-  },
-  hiphop: {
-    bands: [1.9, 1.3, 0.9, 0.85, 1.1],
-    smooth: 0.58,
-    amp: 1.25,
-    speed: 0.95,
-    algo: 'beatPulse',
-    trail: 0.55,
-  },
-  classical: {
-    bands: [0.8, 1, 1.2, 1.3, 1.35],
-    smooth: 0.82,
-    amp: 1,
-    speed: 0.7,
-    algo: 'balanced',
-    trail: 0.7,
-  },
-  podcast: {
-    bands: [0.5, 1.35, 1.8, 1.05, 0.6],
-    smooth: 0.9,
-    amp: 0.8,
-    speed: 0.45,
-    algo: 'midFocus',
-    trail: 0.35,
-  },
-};
-const DEFAULTS = {
-  preset: 'bars',
-  algo: 'balanced',
-  music: 'custom',
-  colorMode: 'duo',
-  c1: '#ff5a2d',
-  c2: '#3ea8ff',
-  cycle: 0,
-  canvasBg: 'ink',
-  format: '16:9',
-  amp: 1,
-  speed: 1,
-  smooth: 0.58,
-  trail: 0.35,
-  zoomW: 1,
-  zoomH: 1,
-  posX: 50,
-  posY: 50,
-  gBass: 1,
-  gLowMid: 1,
-  gMid: 1,
-  gHighMid: 1,
-  gTreble: 1,
-  agc: true,
-  demo: true,
-  autoQuality: true,
-};
-const GROUPS = [
-  { id: 'waves', name: 'Волны' },
-  { id: 'spectrum', name: 'Спектр' },
-  { id: 'radial', name: 'Формы' },
-  { id: 'particles', name: 'Частицы' },
-  { id: 'futuristic', name: 'Футуризм' },
-  { id: 'neon', name: 'Неон · новое' },
-  { id: 'reference-new', name: 'Референсы · новое' },
-  { id: 'spectrum-lab', name: 'Spectrum Lab · новое' },
-  { id: 'beyond-spectrum', name: 'Beyond Spectrum · новое' },
-  { id: 'extra', name: 'Экстра · новые идеи' },
-];
-const GROUP_SHORT = Object.fromEntries(GROUPS.map((item) => [item.id, item.name]));
-const restored = loadState(DEFAULTS, VIS),
-  g = reactive(restored.g),
-  params = reactive(restored.params),
-  dark = ref(restored.dark ?? document.documentElement.classList.contains('dark'));
-const playing = ref(false),
-  mic = ref(false),
+const playing = ref(false);
+const { g, params, dark, saveState } = useStore(() => syncEngine());
+const mic = ref(false),
   hasFile = ref(false),
   dragging = ref(false),
   fileName = ref(''),
@@ -291,27 +189,7 @@ const onDrop = (e) => {
   dragging.value = false;
   loadFile(e.dataTransfer.files[0]);
 };
-watch(
-  g,
-  () => {
-    syncEngine();
-    saveState(g, params, dark.value);
-  },
-  { deep: true },
-);
-watch(
-  params,
-  () => {
-    syncEngine();
-    saveState(g, params, dark.value);
-  },
-  { deep: true },
-);
 watch(playing, () => syncEngine());
-watch(
-  () => g.preset,
-  () => syncEngine(),
-);
 onMounted(() => {
   statusTimer = setInterval(() => {
     fps.value = Engine.fps;

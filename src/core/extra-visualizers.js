@@ -846,3 +846,130 @@ add(
     g.norm();
   },
 );
+
+add(
+  'silkWaves',
+  'EXTRA // Silk Waves',
+  {
+    waves: R('Волн', 4, 1, 10, 1),
+    amplitude: R('Амплитуда', 1.0, 0.1, 3.0),
+    speed: R('Скорость', 1.0, 0, 3.0),
+    neon: R('Неон', 1.0, 0, 2.0),
+    dust: R('Пылинки', 120, 0, 300, 10),
+  },
+  (g) => {
+    const { ctx, w, h, cx, cy, A, p, t } = g;
+
+    g.add();
+
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    for (let i = 0; i <= 1; i += 0.1) grad.addColorStop(i, g.col(i));
+    ctx.strokeStyle = grad;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    const drawSmoothNeon = (neonMult, isDashed = false) => {
+      if (isDashed) {
+        ctx.setLineDash([2, 8]);
+      } else {
+        ctx.setLineDash([]);
+      }
+
+      g.alpha(0.8);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      if (neonMult > 0) {
+        g.alpha(0.3 * neonMult);
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        if (!isDashed) {
+          g.alpha(0.12 * neonMult);
+          ctx.lineWidth = 12;
+          ctx.stroke();
+
+          g.alpha(0.04 * neonMult);
+          ctx.lineWidth = 26;
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+    };
+
+    // Draw smooth intersecting waves
+    for (let i = 0; i < p.waves; i++) {
+      const fi = i / Math.max(1, p.waves - 1);
+      const phase = fi * Math.PI * 2 + i * 1.5;
+      const isDashed = i % 2 !== 0 && i > 0; // Some waves can be dashed/dotted
+
+      ctx.beginPath();
+      for (let x = 0; x <= w; x += 5) {
+        const fx = x / w;
+        // Smooth fade in/out at screen edges
+        const env = Math.sin(fx * Math.PI);
+        const audioVal = 0.2 + A.b(fx) * 1.5;
+
+        const freq1 = 2 + fi * 1.5;
+        const freq2 = 4 - fi;
+
+        const wave1 = Math.sin(fx * Math.PI * freq1 + phase + t * p.speed);
+        const wave2 = Math.sin(fx * Math.PI * freq2 - phase * 0.5 + t * p.speed * 0.7);
+
+        const yOffset = (wave1 * 0.6 + wave2 * 0.4) * env * audioVal * h * 0.3 * p.amplitude;
+
+        if (x === 0) ctx.moveTo(x, cy + yOffset);
+        else ctx.lineTo(x, cy + yOffset);
+      }
+      drawSmoothNeon(p.neon, isDashed);
+    }
+
+    // Draw floating dust / tiny sparks
+    if (!g.st.dustParts || g.st.dustParts.length !== p.dust) {
+      g.st.dustParts = Array.from({ length: p.dust }, () => ({
+        x: Math.random() * w,
+        y: cy + (Math.random() - 0.5) * h * 0.5,
+        vx: Math.random() * 1.5 + 0.2,
+        vy: (Math.random() - 0.5) * 0.5,
+        size: Math.random() * 1.5 + 0.5,
+        phase: Math.random() * Math.PI * 2,
+      }));
+    }
+
+    g.st.dustParts.forEach((pt) => {
+      pt.x += pt.vx * p.speed * g.dt * 60;
+      pt.y += pt.vy * g.dt * 60 + Math.sin(t * 2 + pt.phase) * 0.5;
+
+      // Wrap around
+      if (pt.x > w) {
+        pt.x = 0;
+        pt.y = cy + (Math.random() - 0.5) * h * 0.5;
+      }
+      if (pt.y < 0 || pt.y > h) pt.y = cy;
+
+      const fx = pt.x / w;
+      const env = Math.sin(fx * Math.PI);
+      const audioVal = A.b(fx);
+
+      // Make particles glow brighter when music is loud in their frequency band
+      const alpha = env * (0.1 + audioVal * 0.9) * Math.min(2, p.neon);
+
+      if (alpha > 0.05) {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+        ctx.fillStyle = g.col(fx);
+        g.alpha(alpha);
+        ctx.fill();
+
+        if (p.neon > 0) {
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.size * 4, 0, Math.PI * 2);
+          g.alpha(alpha * 0.25);
+          ctx.fill();
+        }
+      }
+    });
+
+    g.norm();
+  },
+);

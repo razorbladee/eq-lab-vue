@@ -61,7 +61,8 @@ const onPointerUp = () => {
 <style scoped>
 .seekbar-wrap {
   position: relative;
-  width: 100%;
+  width: calc(100% - 14px);
+  margin: 0 7px;
   height: 6px;
   cursor: pointer;
   touch-action: none;

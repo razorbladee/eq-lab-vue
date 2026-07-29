@@ -101,6 +101,7 @@ watch([from, to], setSelection);
             @seek="seek"
           />
           <AudioRegionSelector
+            style="margin-top: 28px"
             :src="audioSrc"
             :duration="duration"
             v-model:from="from"

@@ -106,10 +106,13 @@ watch(
     try {
       const res = await fetch(newSrc);
       const arrayBuffer = await res.arrayBuffer();
-      if (!Audio.ac) {
-        return; // If main context not ready, fallback gracefully.
-      }
-      const audioBuffer = await Audio.ac.decodeAudioData(arrayBuffer);
+
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await new Promise((resolve, reject) => {
+        ctx.decodeAudioData(arrayBuffer, resolve, reject);
+      });
+      if (ctx.state !== 'closed') ctx.close().catch(() => {});
+
       peaks.value = await extractPeaks(audioBuffer, 800);
       draw();
     } catch (err) {
@@ -229,8 +232,10 @@ const widthPct = computed(() =>
 <style scoped>
 .region-wrap {
   position: relative;
-  width: 100%;
+  width: calc(100% - 14px);
+  margin: 0 7px;
   height: 40px;
+
   background: var(--panel-2);
   border-radius: 6px;
   user-select: none;

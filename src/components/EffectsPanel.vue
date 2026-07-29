@@ -8,27 +8,25 @@ const labels = { snow: 'Snowfall', rain: 'Rain streaks', bokeh: 'Bokeh lights', 
 const effect = computed(() => { revision.value; return Effects.items[selected.value]; });
 const touch = () => { Effects.states = Object.create(null); revision.value++; };
 const update = (key, value) => { effect.value[key] = value; touch(); };
-const file = (slot, event) => {
-  const source = event.target.files?.[0];
-  if (!source) return;
-  Effects.setAsset(slot, source);
-  touch();
-  event.target.value = '';
-};
+const file = (slot, event) => { const source = event.target.files?.[0]; if (!source) return; Effects.setAsset(slot, source); touch(); event.target.value = ''; };
 </script>
 <template>
-  <Teleport to=".rail">
-    <details class="sec" data-effects-panel open>
-      <summary>Эффекты и медиа-слои</summary>
-      <div class="sec-body effects-panel-body">
-        <label class="effect-select-label">Эффект<select v-model="selected"><option v-for="(value, id) in Effects.items" :key="id" :value="id">{{ labels[id] }}</option></select></label>
-        <label><input type="checkbox" :checked="effect.enabled" @change="update('enabled', $event.target.checked)"> {{ labels[selected] }}</label>
-        <label>Слой<select :value="effect.layer" @change="update('layer', $event.target.value)"><option value="back">За EQ</option><option value="front">Перед EQ</option></select></label>
-        <label v-for="key in ['opacity', 'amount', 'speed', 'size']" :key="key">{{ key }} <input type="range" :value="effect[key]" min="0" :max="key === 'opacity' ? 1 : key === 'amount' ? 900 : key === 'speed' ? 3 : 64" step=".01" @input="update(key, +$event.target.value)"></label>
-        <label>Цвет <input type="color" :value="effect.color" @input="update('color', $event.target.value)"></label>
-        <div class="media-divider">Медиа-слои</div>
-        <label v-for="slot in ['background', 'cover']" :key="slot">{{ slot === 'background' ? 'Фон' : 'Обложка' }} <input type="file" accept="image/*,video/*" @change="file(slot, $event)"></label>
+  <details class="sec" data-effects-panel open>
+    <summary>Эффекты и медиа-слои</summary>
+    <div class="sec-body effects-panel-body">
+      <label class="effect-select-label">Эффект<select class="effect-select" v-model="selected"><option v-for="(value, id) in Effects.items" :key="id" :value="id">{{ labels[id] }}</option></select></label>
+      <div class="effect-editor">
+        <div class="effect-head"><label><input type="checkbox" :checked="effect.enabled" @change="update('enabled', $event.target.checked)"><span>{{ labels[selected] }}</span></label><select :value="effect.layer" @change="update('layer', $event.target.value)"><option value="back">За EQ</option><option value="front">Перед EQ</option></select></div>
+        <div class="effect-controls">
+          <label>Opacity <output>{{ Number(effect.opacity).toFixed(2) }}</output><input type="range" :value="effect.opacity" min="0" max="1" step=".01" @input="update('opacity', +$event.target.value)"></label>
+          <label>Amount <output>{{ effect.amount }}</output><input type="range" :value="effect.amount" min="10" max="900" step="1" @input="update('amount', +$event.target.value)"></label>
+          <label>Speed <output>{{ Number(effect.speed).toFixed(2) }}</output><input type="range" :value="effect.speed" min="0" max="3" step=".01" @input="update('speed', +$event.target.value)"></label>
+          <label>Size <output>{{ Number(effect.size).toFixed(2) }}</output><input type="range" :value="effect.size" min=".4" max="64" step=".1" @input="update('size', +$event.target.value)"></label>
+          <label>Color<input type="color" :value="effect.color" @input="update('color', $event.target.value)"></label>
+        </div>
       </div>
-    </details>
-  </Teleport>
+      <div class="media-divider">Медиа-слои</div>
+      <div v-for="slot in ['background', 'cover']" :key="slot" class="media-row"><strong>{{ slot === 'background' ? 'Фон' : 'Обложка по центру' }}</strong><small>Изображение или видео</small><input type="file" accept="image/*,video/*" @change="file(slot, $event)"><label>Видимость <input type="checkbox" :checked="Effects.media[slot].enabled" @change="Effects.media[slot].enabled=$event.target.checked"></label><label>Прозрачность <output>{{ Number(Effects.media[slot].opacity).toFixed(2) }}</output><input type="range" :value="Effects.media[slot].opacity" min="0" max="1" step=".01" @input="Effects.media[slot].opacity=+$event.target.value"></label><label>Растяжение<select :value="Effects.media[slot].fit" @change="Effects.media[slot].fit=$event.target.value"><option value="cover">Cover</option><option value="contain">Contain</option><option value="stretch">Stretch</option></select></label></div>
+    </div>
+  </details>
 </template>

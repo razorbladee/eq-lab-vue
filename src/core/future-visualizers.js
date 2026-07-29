@@ -6,7 +6,7 @@ const R = (label, def, min, max, step = 0.01) => ({ label, def, min, max, step }
 const T = (label, def) => ({ label, def, type: 'toggle' });
 const add = (id, name, params, draw) => {
   if (VMAP[id]) return;
-  const v = { id, name, group: 'futuristic-new', params, draw };
+  const v = { id, name, group: 'neon', params, draw };
   VIS.push(v);
   VMAP[id] = v;
 };

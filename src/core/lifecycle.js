@@ -6,13 +6,12 @@ function revoke(url) {
 }
 
 async function disposeAudio(audioElement) {
-  Audio.micOff();
   if (audioElement) {
     audioElement.pause();
     audioElement.removeAttribute('src');
     audioElement.load();
   }
-  for (const node of [Audio.mediaSrc, Audio.micSrc, Audio.an, Audio.out, Audio.sink]) {
+  for (const node of [Audio.mediaSrc, Audio.an, Audio.out, Audio.sink]) {
     try {
       node?.disconnect();
     } catch {
@@ -20,14 +19,7 @@ async function disposeAudio(audioElement) {
     }
   }
   const context = Audio.ac;
-  Audio.ac =
-    Audio.an =
-    Audio.mediaSrc =
-    Audio.micSrc =
-    Audio.out =
-    Audio.sink =
-    Audio.recordDest =
-      null;
+  Audio.ac = Audio.an = Audio.mediaSrc = Audio.out = Audio.sink = Audio.recordDest = null;
   Audio.ready = false;
   Audio.live = false;
   if (context && context.state !== 'closed') await context.close().catch(() => {});

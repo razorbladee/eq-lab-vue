@@ -22,8 +22,7 @@ import { useShortcuts } from './composables/useShortcuts.js';
 
 const playing = ref(false);
 const { g, params, dark, saveState } = useStore(() => syncEngine());
-const mic = ref(false),
-  hasFile = ref(false),
+const hasFile = ref(false),
   dragging = ref(false),
   fileName = ref(''),
   fps = ref(60),
@@ -72,11 +71,7 @@ const frameStyle = computed(() => {
     const [a, b] = g.format.split(':').map(Number);
     return { '--ar': a + '/' + b, '--arn': a / b };
   }),
-  sourceLabel = computed(() =>
-    mic.value
-      ? 'Микрофон · live'
-      : fileName.value || (g.demo ? 'Демо-сигнал' : 'Источник не выбран'),
-  ),
+  sourceLabel = computed(() => fileName.value || (g.demo ? 'Демо-сигнал' : 'Источник не выбран')),
   fmt = (v) =>
     typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2).replace(/0$/, '')) : v;
 const syncEngine = () => {
@@ -114,8 +109,7 @@ const loadFile = (f) => {
   fileName.value = f.name;
   hasFile.value = true;
   g.demo = false;
-  mic.value = false;
-  Audio.micOff();
+
   audioEl.value.play().catch(() => {
     error.value = { id: 'source', msg: 'Браузер не смог воспроизвести этот формат' };
   });
@@ -127,24 +121,6 @@ const togglePlay = async () => {
   if (audioEl.value.paused) {
     await audioEl.value.play().catch(() => {});
   } else audioEl.value.pause();
-};
-const toggleMicrophone = async () => {
-  Audio.ensure(audioEl.value);
-  await Audio.ac.resume();
-  if (mic.value) {
-    Audio.micOff();
-    mic.value = false;
-    return;
-  }
-  try {
-    audioEl.value.pause();
-    await Audio.micOn();
-    mic.value = true;
-    g.demo = false;
-    error.value = null;
-  } catch (reason) {
-    error.value = { id: 'microphone', msg: reason?.message || 'Нет доступа к микрофону' };
-  }
 };
 const snapshot = () => {
   if (!Engine.canvas) return;
@@ -174,7 +150,7 @@ const shortcuts = useShortcuts({
   toggleHelp: () => (helpOpen.value = !helpOpen.value),
   togglePlay,
   toggleFull,
-  toggleMic: toggleMicrophone,
+
   snapshot,
   toggleTheme,
   toggleRecord: () => {
@@ -275,11 +251,9 @@ onUnmounted(() => {
       <aside class="rail" :class="{ open: railOpen }">
         <SourcePanel
           :playing="playing"
-          :microphone="mic"
           :has-file="hasFile"
           :demo="g.demo"
           :load-file="loadFile"
-          :toggle-microphone="toggleMicrophone"
           @update:demo="g.demo = $event"
         /><VisualizerBrowser
           :items="filtered"

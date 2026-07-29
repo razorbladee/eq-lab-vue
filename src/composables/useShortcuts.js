@@ -39,12 +39,6 @@ export function useShortcuts(handlers) {
       return;
     }
 
-    if (e.code === 'KeyM') {
-      e.preventDefault();
-      handlers.toggleMic?.();
-      return;
-    }
-
     if (e.code === 'KeyS') {
       e.preventDefault();
       handlers.snapshot?.();
@@ -71,7 +65,7 @@ export function useShortcuts(handlers) {
       { keys: 'Space', desc: 'Воспроизведение / Пауза' },
       { keys: 'F', desc: 'Полноэкранный режим' },
       { keys: 'R', desc: 'Начать / Остановить запись' },
-      { keys: 'M', desc: 'Включить / Выключить микрофон' },
+
       { keys: 'S', desc: 'Сделать скриншот (PNG)' },
       { keys: 'T', desc: 'Переключить тему' },
       { keys: 'Ctrl+P', desc: 'Показать эту справку' },

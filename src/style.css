@@ -110,7 +110,7 @@ html.dark body {
   max-height: 100%;
   aspect-ratio: var(--ar, 16/9);
   width: min(100%, calc((100cqh - 0px) * var(--arn, 1.7778)));
-  border-radius: 14px;
+  border-radius: 5px;
   overflow: hidden;
   background: #0d0c12;
   box-shadow: var(--shadow);
@@ -128,8 +128,9 @@ html.dark body {
   grid-column: 2;
   grid-row: 2;
   display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 12px 20px;
+  padding: 0;
   background: var(--panel);
   border-top: 1px solid var(--line);
   box-shadow: var(--shadow);

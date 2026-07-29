@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AudioRegionSelector from './AudioRegionSelector.vue';
+import PlaybackSeekbar from './PlaybackSeekbar.vue';
 const props = defineProps({ playing: Boolean, hasFile: Boolean, fileName: String });
 const emit = defineEmits(['ready', 'toggle']);
 const audio = ref(null);
@@ -26,8 +27,8 @@ const setSelection = () => {
     audio.value.dataset.selectionTo = String(to.value);
   }
 };
-const seek = (event) => {
-  current.value = Number(event.target.value);
+const seek = (time) => {
+  current.value = Number(time);
   if (audio.value) audio.value.currentTime = current.value;
 };
 const onTime = () => {
@@ -74,6 +75,7 @@ watch([from, to], setSelection);
 </script>
 <template>
   <section class="player-panel" aria-label="Аудиоплеер">
+    <PlaybackSeekbar :duration="duration" :current="current" @seek="seek" />
     <div class="player-row">
       <button
         type="button"

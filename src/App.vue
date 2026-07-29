@@ -135,8 +135,7 @@ const playing = ref(false),
   error = ref(null),
   audioEl = ref(null),
   canvasEl = ref(null),
-  frameEl = ref(null),
-  meters = reactive([]);
+  frameEl = ref(null);
 let audioUrl = '',
   statusTimer = 0,
   meterRaf = 0,
@@ -205,6 +204,9 @@ const loadFile = (f) => {
     return;
   }
   Audio.ensure(audioEl.value);
+  if (Audio.ac && Audio.ac.state === 'suspended') {
+    Audio.ac.resume().catch(() => {});
+  }
   revoke(audioUrl);
   audioUrl = URL.createObjectURL(f);
   audioEl.value.src = audioUrl;
@@ -317,13 +319,6 @@ onMounted(() => {
     qualityPct.value = Math.round(Engine.q * 100);
     bpm.value = Audio.bpm || '--';
   }, 500);
-  const paint = () => {
-    for (let i = 0; i < 5; i++)
-      if (meters[i])
-        meters[i].style.transform = 'scaleX(' + clamp(Audio[bandKeys[i].k], 0, 1) + ')';
-    meterRaf = requestAnimationFrame(paint);
-  };
-  meterRaf = requestAnimationFrame(paint);
   nextTick(() => {
     if (frameEl.value) {
       resizeObserver = new ResizeObserver(() => Engine.resize());
@@ -334,7 +329,7 @@ onMounted(() => {
 onUnmounted(() => {
   recorder.cancel();
   clearInterval(statusTimer);
-  cancelAnimationFrame(meterRaf);
+
   resizeObserver?.disconnect();
   Engine.stop();
   Engine.onErr = null;
@@ -347,27 +342,36 @@ onUnmounted(() => {
 <template>
   <div id="app" v-cloak class="shell">
     <header
-      class="flex items-center gap-3 px-4 py-2.5 border-b"
+      class="relative flex items-center justify-between px-4 py-2.5 border-b"
       style="border-color: var(--line); background: var(--panel)"
     >
-      <button class="btn xl:hidden" @click="railOpen = !railOpen">☰</button>
-      <div class="flex items-baseline gap-2.5 min-w-0">
-        <span class="mono font-bold text-[13px] tracking-[0.2em]">EQ&nbsp;LAB</span
-        ><span
-          class="mono text-[10px] tracking-[0.14em] uppercase truncate"
+      <div class="flex items-center gap-3 min-w-0">
+        <button class="btn xl:hidden" @click="railOpen = !railOpen">☰</button>
+        <span class="mono font-bold text-[13px] tracking-[0.2em]">EQ&nbsp;LAB</span>
+      </div>
+
+      <div
+        class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1/3 text-center pointer-events-none hidden sm:block"
+      >
+        <span
+          class="mono text-[10px] tracking-[0.14em] uppercase truncate block"
           style="color: var(--ink-3)"
           >{{ sourceLabel }}</span
         >
       </div>
-      <div class="ml-auto flex items-center gap-2">
-        <span class="hidden sm:inline mono text-[10px] nums" style="color: var(--ink-3)"
-          >{{ fps }} FPS / {{ res }} / Q{{ qualityPct }}</span
-        ><select v-model="g.format" style="width: auto; min-width: 88px" class="mono text-[12px]">
-          <option v-for="format in formats" :key="format">{{ format }}</option></select
-        ><button class="btn" @click="snapshot">PNG</button
-        ><button class="btn" @click="toggleFull">⛶</button
-        ><button class="btn" @click="toggleTheme">{{ dark ? '☀' : '☾' }}</button
-        ><button class="btn xl:hidden" @click="inspOpen = !inspOpen">⚙</button>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="hidden sm:inline mono text-[10px] nums mr-2" style="color: var(--ink-3)"
+          ><span v-if="bpm !== '--'">BEAT · {{ bpm }} &nbsp;|&nbsp; </span>{{ fps }} FPS /
+          {{ res }} / Q{{ qualityPct }}</span
+        >
+        <select v-model="g.format" style="width: auto; min-width: 88px" class="mono text-[12px]">
+          <option v-for="format in formats" :key="format">{{ format }}</option>
+        </select>
+        <button class="btn" @click="snapshot">PNG</button>
+        <button class="btn" @click="toggleFull">⛶</button>
+        <button class="btn" @click="toggleTheme">{{ dark ? '☀' : '☾' }}</button>
+        <button class="btn xl:hidden" @click="inspOpen = !inspOpen">⚙</button>
       </div>
     </header>
     <div class="body-row">

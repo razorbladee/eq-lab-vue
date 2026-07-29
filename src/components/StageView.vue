@@ -15,28 +15,12 @@ onMounted(() => emit('ready', { canvas, frame }));
 </script>
 <template>
   <main class="stage">
-    <div
-      ref="frame"
-      class="frame"
-      :style="frameStyle"
-      @dragover.prevent="$emit('dragover')"
-      @dragleave="$emit('dragleave')"
-      @drop.prevent="$emit('drop', $event)"
-    >
+    <div class="frame" ref="frame" :style="frameStyle">
       <canvas ref="canvas"></canvas>
-      <div v-if="dragging" class="drop">Отпустите трек</div>
-    </div>
-    <div class="stage-foot flex items-center gap-4">
-      <div class="flex-1 grid grid-cols-5 gap-2">
-        <div v-for="(band, i) in bands" :key="band.k">
-          <div class="meter"><i :ref="(el) => (meters[i] = el)" /></div>
-          <span class="mono text-[9px]">{{ band.short }}</span>
-        </div>
+      <div v-if="dragging" class="drop">Отпустите аудиофайл</div>
+      <div v-if="error" class="drop" style="background: oklch(46% 0.185 32 / 0.8)">
+        {{ error.msg }}
       </div>
-      <span class="mono text-[10px]">BEAT · {{ bpm }} BPM</span>
     </div>
-    <p v-if="error" class="mono text-[11px]" style="color: var(--accent)">
-      Визуализатор «{{ error.id }}» упал: {{ error.msg }}
-    </p>
   </main>
 </template>

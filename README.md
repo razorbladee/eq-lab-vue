@@ -1,8 +1,12 @@
-# EQ Lab
+# EQ Lab Full
 
-Полная текущая версия EQ Lab сохранена в `eq-lab-vue (2).html`: 49 визуализаторов, Vue-интерфейс, Tailwind-верстка, отдельные параметры, localStorage, темы, микрофон и адаптивный Canvas.
+Vue 3 + Vite + Tailwind project with 49 visualizers split into maintainable modules.
 
-Vite + Vue запускают этот файл через `src/App.vue`, без урезания функциональности и без дублирования огромного реестра визуализаторов.
+- `src/core/audio.js`: Web Audio, FFT mapping, AGC, beat detection
+- `src/core/palette.js`: color LUT and glow sprites
+- `src/core/visualizers.js`: visualizer registry and renderers
+- `src/core/engine.js`: canvas loop, adaptive quality, resizing
+- `src/App.vue`: UI, state, persistence, source controls
 
 ```bash
 npm install
@@ -11,5 +15,3 @@ npm run lint
 npm run format:check
 npm run build
 ```
-
-Открывать приложение нужно через Vite, а не двойным кликом по HTML: микрофон и Web Audio требуют localhost или HTTPS.

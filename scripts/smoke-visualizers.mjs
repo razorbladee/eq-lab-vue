@@ -25,6 +25,11 @@ globalThis.document = {
 };
 globalThis.Image = class {};
 
+await import('../src/core/collections/waves.js');
+await import('../src/core/collections/spectrum.js');
+await import('../src/core/collections/radial.js');
+await import('../src/core/collections/particles.js');
+await import('../src/core/collections/futuristic.js');
 await import('../src/core/experimental-visualizers.js');
 await import('../src/core/neon-visualizers.js');
 await import('../src/core/future-visualizers.js');

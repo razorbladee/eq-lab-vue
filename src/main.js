@@ -1,4 +1,9 @@
 import './core/disable-legacy-effects.js';
+import './core/collections/waves.js';
+import './core/collections/spectrum.js';
+import './core/collections/radial.js';
+import './core/collections/particles.js';
+import './core/collections/futuristic.js';
 import './core/experimental-visualizers.js';
 import './core/neon-visualizers.js';
 import './core/future-visualizers.js';

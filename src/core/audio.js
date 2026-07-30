@@ -113,8 +113,7 @@ const Audio = {
   ac: null,
   an: null,
   mediaSrc: null,
-  micSrc: null,
-  micStream: null,
+
   rate: 48000,
   out: null,
   sink: null,
@@ -194,29 +193,9 @@ const Audio = {
       for (let k = 0; k < 5; k++) this.bandW[i * 5 + k] = w[k] / s;
     }
   },
-  async micOn() {
-    if (!this.ac) throw new Error('AudioContext не инициализирован');
-    if (!navigator.mediaDevices?.getUserMedia)
-      throw new Error('Доступ к микрофону требует https или localhost');
-    this.micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false },
-    });
-    this.micSrc = this.ac.createMediaStreamSource(this.micStream);
-    this.micSrc.connect(this.an);
-    if (this.recordDest) this.micSrc.connect(this.recordDest);
-  },
-  micOff() {
-    if (this.micSrc) {
-      this.micSrc.disconnect();
-      this.micSrc = null;
-    }
-    if (this.micStream) {
-      this.micStream.getTracks().forEach((t) => t.stop());
-      this.micStream = null;
-    }
-  },
+
   update(dt, S) {
-    const useLive = this.ready && (S.playing || this.micSrc);
+    const useLive = this.ready && S.playing;
     this.live = useLive;
     const g = ALGOS[S.algo] || ALGOS.balanced;
     if (useLive) {
